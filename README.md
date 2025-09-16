@@ -33,12 +33,12 @@ The system combines **C++/SQL backend services**, **machine learning models**, a
 
 
 ## CI/CD
-CI: GitHub Actions run build + tests on PRs
-CD: Dockerized deployments to staging/prod
-Automation: Linting, security scans, test coverage
+- CI: GitHub Actions run build + tests on PRs
+- CD: Dockerized deployments to staging/prod
+- Automation: Linting, security scans, test coverage
 
 ## Team
-Christopher Contreras
-Richard Nguyen
-Alex Martinez
-Rocco Catalasan
+- Christopher Contreras
+- Richard Nguyen
+- Alex Martinez
+- Rocco Catalasan
