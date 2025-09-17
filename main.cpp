@@ -41,15 +41,17 @@ public:
         }
         
         // Mock price data for demo
-        return R"({
+         return R"({
             "symbol": ")" + symbol + R"(",
             "name": ")" + stocks[symbol] + R"(",
             "current_price": 425.67,
             "change": "+2.34",
             "change_percent": "+0.55%",
             "last_updated": ")" + getCurrentTimestamp() + R"(",
-            "prediction_7d": 432.15,
-            "confidence": 0.78
+            "52_week_high": 445.50,
+            "52_week_low": 380.25,
+            "volume": 1250000,
+            "market_cap": "68.5B"
         })";
     }
 
