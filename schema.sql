@@ -38,6 +38,20 @@ CREATE TABLE indicators (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Defense sector specific events and catalysts that can affect the stock
+CREATE TABLE defense_events (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) REFERENCES stocks(symbol),
+    event_type VARCHAR(50) NOT NULL, -- 'contract_award', 'earnings', 'merger', 'acquisition', 'product_launch'
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    event_date DATE,
+    value_amount DECIMAL(15,2), -- Contract value, deal size, etc.
+    impact_rating VARCHAR(10), -- 'high', 'medium', 'low'
+    source VARCHAR(255), -- News source, SEC filing, etc.
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- User management (for future sprints)
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
@@ -55,6 +69,18 @@ CREATE TABLE watchlist (
     symbol VARCHAR(10) REFERENCES stocks(symbol),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, symbol)
+);
+
+-- System audit log for tracking changes
+CREATE TABLE audit_log (
+    id SERIAL PRIMARY KEY,
+    table_name VARCHAR(100) NOT NULL,
+    record_id INTEGER,
+    action VARCHAR(20) NOT NULL, -- 'INSERT', 'UPDATE', 'DELETE'
+    old_values JSONB,
+    new_values JSONB,
+    changed_by INTEGER REFERENCES users(id),
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Indexes for performance
