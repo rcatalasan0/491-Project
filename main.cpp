@@ -5,21 +5,25 @@
 #include <sstream>
 #include <thread>
 #include <chrono>
+#include <iomanip>   // std::put_time
+#include <ctime>     // std::gmtime
 
-// Simple HTTP server for Sprint 1 demo
+// Simple HTTP "demo" for Sprint 1 (prints JSON to console)
 class StockAPI {
 private:
     std::map<std::string, std::string> stocks = {
         {"LMT", "Lockheed Martin"},
         {"RTX", "Raytheon Technologies"},
-        {"BA", "Boeing"},
+        {"BA",  "Boeing"},
         {"NOC", "Northrop Grumman"},
         {"LHX", "L3Harris Technologies"}
     };
 
 public:
     std::string handleHealth() {
-        return R"({"status": "OK", "timestamp": ")" + getCurrentTimestamp() + R"(", "service": "stock-predictor-api"})";
+        return R"({"status": "OK", "timestamp": ")"
+            + getCurrentTimestamp()
+            + R"(", "service": "stock-predictor-api"})";
     }
 
     std::string handleStocks() {
@@ -28,7 +32,11 @@ public:
         bool first = true;
         for (const auto& [symbol, name] : stocks) {
             if (!first) json << ",";
-            json << R"({"symbol": ")" << symbol << R"(", "name": ")" << name << R"(", "sector": "defense"})";
+            json << R"({"symbol": ")"
+                 << symbol
+                 << R"(", "name": ")"
+                 << name
+                 << R"(", "sector": "defense"})";
             first = false;
         }
         json << "]";
@@ -37,9 +45,10 @@ public:
 
     std::string handleStockDetail(const std::string& symbol) {
         if (stocks.find(symbol) == stocks.end()) {
-            return R"({"error": "Stock not found", "symbol": ")" + symbol + R"("})";
+            return R"({"error": "Stock not found", "symbol": ")"
+                + symbol + R"("})";
         }
-        
+
         // Mock price data for demo
         return R"({
             "symbol": ")" + symbol + R"(",
@@ -56,9 +65,9 @@ public:
 private:
     std::string getCurrentTimestamp() {
         auto now = std::chrono::system_clock::now();
-        auto time_t = std::chrono::system_clock::to_time_t(now);
+        auto time_t_val = std::chrono::system_clock::to_time_t(now);
         std::stringstream ss;
-        ss << std::put_time(std::gmtime(&time_t), "%Y-%m-%dT%H:%M:%SZ");
+        ss << std::put_time(std::gmtime(&time_t_val), "%Y-%m-%dT%H:%M:%SZ");
         return ss.str();
     }
 };
@@ -76,8 +85,12 @@ public:
         else if (path == "/api/v1/stocks") {
             return api.handleStocks();
         }
-        else if (path.substr(0, 17) == "/api/v1/stocks/") {
-            std::string symbol = path.substr(17);
+        // Match "/api/v1/stocks/{symbol}"  (prefix length = 15)
+        else if (path.compare(0, 15, "/api/v1/stocks/") == 0) {
+            if (path.size() <= 15) {
+                return R"({"error":"Missing symbol"})";
+            }
+            std::string symbol = path.substr(15);
             return api.handleStockDetail(symbol);
         }
         else {
@@ -86,31 +99,30 @@ public:
     }
 };
 
-// Main server (simplified for demo)
+// Main (demo)
 int main() {
     Router router;
-    
+
     std::cout << "🚀 Stock Market Predictor API Server Starting..." << std::endl;
     std::cout << "📊 Defense Sector Focus (LMT, RTX, BA, NOC, LHX)" << std::endl;
-    std::cout << "🔗 Endpoints:" << std::endl;
-    std::cout << "   GET /health" << std::endl;
-    std::cout << "   GET /api/v1/stocks" << std::endl;
-    std::cout << "   GET /api/v1/stocks/{symbol}" << std::endl;
+    std::cout << "🔗 Endpoints:\n"
+                 "   GET /health\n"
+                 "   GET /api/v1/stocks\n"
+                 "   GET /api/v1/stocks/{symbol}" << std::endl;
     std::cout << "\n📡 Server running on localhost:8080" << std::endl;
-    
+
     // Demo the endpoints
     std::cout << "\n=== DEMO OUTPUT ===" << std::endl;
+
     std::cout << "GET /health:" << std::endl;
     std::cout << router.route("/health") << std::endl;
-    
+
     std::cout << "\nGET /api/v1/stocks:" << std::endl;
     std::cout << router.route("/api/v1/stocks") << std::endl;
-    
+
     std::cout << "\nGET /api/v1/stocks/LMT:" << std::endl;
     std::cout << router.route("/api/v1/stocks/LMT") << std::endl;
-    
-    // Keep server "running" for demo
+
     std::cout << "\n✅ API Demo Complete - Ready for Sprint 1 submission!" << std::endl;
-    
     return 0;
 }
