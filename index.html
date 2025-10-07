@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Prediction App 📈</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 40px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 700px;
+            margin: auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 12px;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus {
+            border-color: #3498db;
+            outline: none;
+        }
+        button {
+            padding: 12px 25px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        #status-message {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            font-style: italic;
+            text-align: center;
+        }
+        #prediction-results {
+            margin-top: 25px;
+            padding: 20px;
+            background-color: #ecf0f1;
+            border-radius: 8px;
+            min-height: 100px; /* Gives space for results */
+        }
+        #prediction-results h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        #prediction-list li {
+            list-style: none;
+            padding: 8px 0;
+            border-bottom: 1px dashed #bdc3c7;
+        }
+        #prediction-list {
+            padding-left: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Stock Predictor MVP 🚀</h1>
+        <p>Enter a stock ticker (e.g., **LMT** for the baseline demo) to get a 7-day predicted price trend.</p>
+        
+        <div class="input-group">
+            <input type="text" id="tickerInput" placeholder="Enter Ticker Symbol (e.g., LMT)" value="LMT" maxlength="5">
+            <button id="predictButton">Get Prediction</button>
+        </div>
+        
+        <div id="status-message"></div>
+
+        <div id="prediction-results">
+            <h3>Prediction Output:</h3>
+            <ul id="prediction-list">
+                <li>*Results will appear here.*</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('predictButton').addEventListener('click', async () => {
+            const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
+            const statusDiv = document.getElementById('status-message');
+            const resultsList = document.getElementById('prediction-list');
+            
+            // Clear previous results and show loading status
+            resultsList.innerHTML = '';
+            statusDiv.textContent = `Fetching prediction for ${ticker}...`;
+            statusDiv.style.color = '#3498db';
+            statusDiv.style.backgroundColor = '#ecf0f1';
+
+            if (!ticker) {
+                statusDiv.textContent = "Please enter a ticker symbol.";
+                statusDiv.style.color = 'red';
+                statusDiv.style.backgroundColor = '#fbecec';
+                return;
+            }
+
+            try {
+                // Fetch request to your Flask API
+                // Assumes your Python server is running on port 5000
+                const days = 7;
+                const url = `http://127.0.0.1:5000/predict?ticker=${ticker}&days=${days}`;
+                
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`Server returned status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    statusDiv.textContent = `Error: ${data.error}`;
+                    statusDiv.style.color = 'red';
+                    statusDiv.style.backgroundColor = '#fbecec';
+                    return;
+                }
+                
+                // --- Success: Update UI ---
+                statusDiv.textContent = `Prediction for ${data.ticker} retrieved successfully!`;
+                statusDiv.style.color = '#27ae60';
+                statusDiv.style.backgroundColor = '#e6faee';
+
+                data.predictions.forEach(p => {
+                    const listItem = document.createElement('li');
+                    listItem.textContent = `Date: ${p.date} | Predicted Price: $${p.price}`;
+                    resultsList.appendChild(listItem);
+                });
+
+            } catch (error) {
+                console.error('Fetch error:', error);
+                statusDiv.textContent = `Failed to connect to the API. Is 'app.py' running? Error: ${error.message}`;
+                statusDiv.style.color = 'red';
+                statusDiv.style.backgroundColor = '#fbecec';
+            }
+        });
+    </script>
+</body>
+</html>
