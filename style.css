@@ -1,0 +1,105 @@
+:root{
+  --bg:#0b1220;
+  --bg-2:#0f172a;
+  --panel:#0f172a;
+  --card:#111827;
+  --ink:#e5e7eb;
+  --muted:#9ca3af;
+  --brand:#6366f1;
+  --brand-700:#4f46e5;
+  --ok:#16a34a;
+  --bad:#ef4444;
+  --ring:rgba(99,102,241,.35);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  background: radial-gradient(800px 400px at 20% -10%, #1e293b 0%, transparent 60%),
+              radial-gradient(1000px 600px at 110% 10%, #1d4ed8 0%, transparent 55%),
+              var(--bg);
+  color:var(--ink);
+}
+
+.container{max-width:1100px;margin:0 auto;padding:24px}
+
+.site-header{
+  background:linear-gradient(180deg, rgba(15,23,42,.9), rgba(15,23,42,.6));
+  backdrop-filter:saturate(140%) blur(8px);
+  position:sticky;top:0;z-index:10;border-bottom:1px solid rgba(99,102,241,.15)
+}
+.head-wrap{display:flex;align-items:center;justify-content:space-between}
+.brand{margin:0;font-size:22px;letter-spacing:.3px}
+.badge{background:rgba(99,102,241,.18);color:#c7d2fe;border:1px solid rgba(99,102,241,.35);padding:2px 8px;border-radius:999px;font-size:12px;margin-left:8px}
+.header-actions .link{color:#c7d2fe;text-decoration:none;margin-left:18px}
+.header-actions .link:hover{color:#fff;text-decoration:underline}
+
+.panel{
+  margin-top:22px;background:linear-gradient(180deg, rgba(99,102,241,.06), rgba(99,102,241,.02));
+  border:1px solid rgba(99,102,241,.18);border-radius:16px;padding:22px
+}
+.hero{display:grid;grid-template-columns: 1.2fr .8fr;gap:16px}
+.hero h2{margin:0 0 6px;font-size:26px}
+.muted{color:var(--muted)}
+.controls{align-self:center}
+
+.row{display:flex;gap:10px}
+input[type="text"]{
+  flex:1;padding:12px 14px;border-radius:10px;border:1px solid rgba(148,163,184,.35);
+  background:#0b1220;color:var(--ink);outline:none;transition:border-color .2s, box-shadow .2s
+}
+input[type="text"]::placeholder{color:#94a3b8}
+input[type="text"]:focus{border-color:var(--brand);box-shadow:0 0 0 4px var(--ring)}
+
+button{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:12px 16px;border:0;border-radius:10px;background:var(--brand);color:#fff;font-weight:700;
+  cursor:pointer;transition:background .18s, transform .05s
+}
+button:hover{background:var(--brand-700)}
+button:active{transform:translateY(1px)}
+button .spinner{display:none}
+button.loading .btn-label{opacity:.0}
+button.loading .spinner{display:inline-block}
+
+.toolbar{display:flex;gap:12px;align-items:center;margin-top:10px}
+.switch{display:inline-flex;gap:8px;align-items:center;color:var(--muted);font-size:14px}
+.hint{color:var(--muted);font-size:13px}
+
+.toast{display:none;margin-top:12px;padding:12px 14px;border-radius:10px;border:1px solid rgba(148,163,184,.25);background:#0b1220}
+.toast.ok{border-color:rgba(22,163,74,.4);background:rgba(22,163,74,.08);color:#bbf7d0}
+.toast.err{border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.08);color:#fecaca}
+.toast.info{border-color:rgba(99,102,241,.35);background:rgba(99,102,241,.08);color:#c7d2fe}
+.toast.show{display:block;animation:fade .18s ease-out}
+@keyframes fade{from{opacity:.6;transform:translateY(-2px)}to{opacity:1;transform:none}}
+
+.grid{display:grid;gap:16px;margin-top:16px;grid-template-columns:1.3fr .7fr}
+@media (max-width:960px){.hero{grid-template-columns:1fr}.grid{grid-template-columns:1fr}}
+
+.card{background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));
+  border:1px solid rgba(148,163,184,.2);border-radius:14px;padding:16px}
+.card h3{margin:0 0 8px}
+
+.meta{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.kv{padding:10px 12px;border:1px dashed rgba(148,163,184,.35);border-radius:10px;background:#0b1220}
+.kv b{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+
+.list{margin:8px 0 0;padding:0;list-style:none}
+.list li{padding:8px 0;border-bottom:1px dashed rgba(148,163,184,.25)}
+.list .muted{color:var(--muted)}
+
+.json-wrap{margin-top:12px}
+details{background:#0b1220;border:1px solid rgba(148,163,184,.25);border-radius:10px;padding:10px}
+summary{cursor:pointer;font-weight:600}
+pre{overflow:auto;margin:10px 0 0;background:#0b1220;color:#e5e7eb;padding:12px;border-radius:10px}
+
+.spinner{
+  width:18px;height:18px;border-radius:50%;border:3px solid rgba(255,255,255,.45);border-right-color:#fff;
+  animation:spin .8s linear infinite
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.site-footer{opacity:.8;border-top:1px solid rgba(99,102,241,.15);margin-top:18px}
+.site-footer p{color:var(--muted);font-size:13px}
