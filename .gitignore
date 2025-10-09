@@ -1,4 +1,0 @@
-.vscode/
-*.exe
-build/
-cmake-build-*/
