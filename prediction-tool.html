@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stock Predictor • MVP</title>
+
+  <!-- Inter font for a modern look -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container head-wrap">
+      <h1 class="brand">Stock Predictor <span class="badge">MVP</span></h1>
+      <nav class="header-actions">
+        <a class="link" href="README.md">Docs</a>
+        <a class="link" href="https://github.com/rcatalasan0/491-Project" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="panel hero">
+      <div class="hero-copy">
+        <h2>Defense Sector Forecasts, Fast.</h2>
+        <p class="muted">
+          Enter a ticker (e.g. <code>LMT</code>) to fetch a 7-day prediction. This UI calls your local API
+          at <code>http://127.0.0.1:5000/predict</code>.
+        </p>
+      </div>
+
+      <div class="controls">
+        <div class="row">
+          <input id="tickerInput" type="text" placeholder="Enter Ticker (e.g. LMT)" value="LMT" maxlength="5" />
+          <button id="predictButton">
+            <span class="btn-label">Get Prediction</span>
+            <span class="spinner" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="toolbar">
+          <label class="switch">
+            <input id="smoothToggle" type="checkbox" />
+            <span>Smooth chart line</span>
+          </label>
+          <span class="hint">Tip: try LMT, RTX, BA, NOC, LHX…</span>
+        </div>
+
+        <div id="status" class="toast info" role="status" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h3>7-Day Price Projection</h3>
+        <canvas id="chart" width="800" height="360"></canvas>
+        <details class="json-wrap">
+          <summary>Raw API response</summary>
+          <pre id="jsonDump">{}</pre>
+        </details>
+      </article>
+
+      <aside class="card">
+        <h3>Overview</h3>
+        <div class="meta">
+          <div class="kv"><b>Ticker</b><span id="m-ticker">—</span></div>
+          <div class="kv"><b>Last Updated</b><span id="m-updated">—</span></div>
+          <div class="kv"><b>Start Price</b><span id="m-start">—</span></div>
+          <div class="kv"><b>End Price</b><span id="m-end">—</span></div>
+          <div class="kv"><b>Change ($)</b><span id="m-change">—</span></div>
+          <div class="kv"><b>Change (%)</b><span id="m-changePct">—</span></div>
+        </div>
+
+        <h4 style="margin-top:14px;">Daily Points</h4>
+        <ul id="predictionList" class="list">
+          <li class="muted">Results will appear here.</li>
+        </ul>
+      </aside>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>© 2025 Stock Predictor • Prototype UI</p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
