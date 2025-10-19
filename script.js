@@ -1,3 +1,6 @@
+/******************************
+ * Helpers / DOM
+ *****************************/
 const $ = (sel) => document.querySelector(sel);
 
 const els = {
@@ -8,6 +11,8 @@ const els = {
   json: $("#jsonDump"),
   chart: $("#chart"),
   smooth: $("#smoothToggle"),
+  themeBtn: $("#themeToggle"),
+  metaTheme: $("#metaThemeColor"),
   meta: {
     ticker: $("#m-ticker"),
     updated: $("#m-updated"),
@@ -31,27 +36,71 @@ function fmt(n, d = 2) {
   return Number(n).toFixed(d);
 }
 
-function drawChart(points, smooth = false) {
+/******************************
+ * Theme Toggle (persistent, system-aware)
+ *****************************/
+(function initTheme() {
+  const root = document.documentElement;
+  const STORAGE_KEY = "pref-theme";
+  const THEMES = { LIGHT: "light", DARK: "dark" };
+
+  // initial theme: saved -> system -> light
+  const saved = localStorage.getItem(STORAGE_KEY);
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const startTheme = saved || (prefersDark ? THEMES.DARK : THEMES.LIGHT);
+  applyTheme(startTheme);
+
+  // event
+  if (els.themeBtn) {
+    els.themeBtn.addEventListener("click", () => {
+      const next = root.dataset.theme === THEMES.DARK ? THEMES.LIGHT : THEMES.DARK;
+      applyTheme(next);
+      localStorage.setItem(STORAGE_KEY, next);
+    });
+  }
+
+  function applyTheme(theme) {
+    root.setAttribute("data-theme", theme);
+    updateToggleUI(theme === THEMES.DARK);
+    updateMetaTheme(theme === THEMES.DARK ? "#0b1220" : "#ffffff");
+    // Repaint chart to use theme colors if data exists
+    try {
+      const obj = JSON.parse(els.json.textContent || "{}");
+      const points = (obj.predictions || []).map(p => ({ date: p.date, price: Number(p.price) }));
+      drawChart(points, els.smooth.checked);
+    } catch {}
+  }
+
+  function updateToggleUI(isDark) {
+    if (!els.themeBtn) return;
+    els.themeBtn.setAttribute("aria-pressed", String(isDark));
+    const icon = els.themeBtn.querySelector(".theme-icon");
+    const text = els.themeBtn.querySelector(".theme-text");
+    if (icon) icon.textContent = isDark ? "☀️" : "🌙";
+    if (text) text.textContent = isDark ? "Light" : "Dark";
+  }
+
+  function updateMetaTheme(color) {
+    if (els.metaTheme) els.metaTheme.setAttribute("content", color);
+  }
+})();
+
+/******************************
+ * Chart (Canvas)
+ *****************************/
+function getCSSVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function drawChart(points = [], smooth = false) {
   const ctx = els.chart.getContext("2d");
   const w = els.chart.width, h = els.chart.height;
   ctx.clearRect(0, 0, w, h);
 
-  if (!points || points.length === 0) {
-    ctx.fillStyle = "#9ca3af";
-    ctx.fillText("No data", 20, 24);
-    return;
-  }
-
-  const prices = points.map(p => p.price);
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
-  const pad = 10;
-
-  const x = (i) => pad + (i / (points.length - 1 || 1)) * (w - pad * 2);
-  const y = (v) => h - pad - ((v - min) / (max - min || 1)) * (h - pad * 2);
-
   // grid
-  ctx.strokeStyle = "rgba(148,163,184,.15)";
+  const pad = 10;
+  const gridColor = getCSSVar("--grid") || "rgba(148,163,184,.15)";
+  ctx.strokeStyle = gridColor;
   ctx.lineWidth = 1;
   [0, 0.25, 0.5, 0.75, 1].forEach(t => {
     ctx.beginPath();
@@ -61,10 +110,23 @@ function drawChart(points, smooth = false) {
     ctx.stroke();
   });
 
+  if (!points || points.length === 0) {
+    ctx.fillStyle = getCSSVar("--muted") || "#9ca3af";
+    ctx.fillText("No data", 20, 24);
+    return;
+  }
+
+  const prices = points.map(p => p.price);
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+
+  const x = (i) => pad + (i / (points.length - 1 || 1)) * (w - pad * 2);
+  const y = (v) => h - pad - ((v - min) / (max - min || 1)) * (h - pad * 2);
+
   // line
   ctx.beginPath();
   ctx.lineWidth = 2;
-  ctx.strokeStyle = "#6366f1";
+  ctx.strokeStyle = getCSSVar("--chart-line") || "#6366f1";
   ctx.moveTo(x(0), y(prices[0]));
   for (let i = 1; i < points.length; i++) {
     if (smooth) {
@@ -79,9 +141,11 @@ function drawChart(points, smooth = false) {
   ctx.stroke();
 
   // fill
+  const top = getCSSVar("--chart-fill-top") || "rgba(99,102,241,.35)";
+  const bottom = getCSSVar("--chart-fill-bottom") || "rgba(99,102,241,0)";
   const grad = ctx.createLinearGradient(0, pad, 0, h - pad);
-  grad.addColorStop(0, "rgba(99,102,241,.35)");
-  grad.addColorStop(1, "rgba(99,102,241,0)");
+  grad.addColorStop(0, top);
+  grad.addColorStop(1, bottom);
   ctx.lineTo(w - pad, h - pad);
   ctx.lineTo(pad, h - pad);
   ctx.closePath();
@@ -94,6 +158,9 @@ function setLoading(isLoading) {
   els.btn.disabled = isLoading;
 }
 
+/******************************
+ * Fetch / Render
+ *****************************/
 async function fetchPrediction() {
   const ticker = els.input.value.trim().toUpperCase();
   if (!ticker) {
@@ -107,8 +174,14 @@ async function fetchPrediction() {
 
   try {
     const days = 7;
-    const url = `http://127.0.0.1:5000/predict?ticker=${ticker}&days=${days}`;
-    const res = await fetch(url);
+    const url = `http://127.0.0.1:5000/predict?ticker=${encodeURIComponent(ticker)}&days=${days}`;
+
+    // Optional: timeout wrapper
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 10000); // 10s
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(t);
+
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
@@ -162,11 +235,12 @@ async function fetchPrediction() {
   }
 }
 
-// events
+/******************************
+ * Events & Initial State
+ *****************************/
 els.btn.addEventListener("click", fetchPrediction);
 els.input.addEventListener("keydown", (e) => { if (e.key === "Enter") fetchPrediction(); });
 els.smooth.addEventListener("change", () => {
-  // re-render last response if available
   try {
     const obj = JSON.parse(els.json.textContent || "{}");
     const points = (obj.predictions || []).map(p => ({ date: p.date, price: Number(p.price) }));
@@ -174,6 +248,6 @@ els.smooth.addEventListener("change", () => {
   } catch {}
 });
 
-// initial empty chart
+// Initial empty chart + ready toast
 drawChart([]);
 toast("info", "Ready. Enter a ticker and click Get Prediction.");

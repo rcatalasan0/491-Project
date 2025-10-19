@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -10,6 +10,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
+  <!-- Mobile browser theme color (updated dynamically by JS) if we ever get there I don't think we will should just only be website on browser for computer -->
+  <meta id="metaThemeColor" name="theme-color" content="#ffffff">
+
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -19,6 +22,16 @@
       <nav class="header-actions">
         <a class="link" href="README.md">Docs</a>
         <a class="link" href="https://github.com/rcatalasan0/491-Project" target="_blank" rel="noreferrer">GitHub</a>
+
+        <!-- Theme toggle -->
+        <button id="themeToggle"
+                class="theme-toggle"
+                type="button"
+                aria-label="Toggle color theme"
+                aria-pressed="false"
+                title="Toggle dark mode">
+          <span class="theme-icon">🌙</span><span class="theme-text">Dark</span>
+        </button>
       </nav>
     </div>
   </header>
@@ -56,7 +69,7 @@
     <section class="grid">
       <article class="card">
         <h3>7-Day Price Projection</h3>
-        <canvas id="chart" width="800" height="360"></canvas>
+        <canvas id="chart" width="800" height="360" role="img" aria-label="Predicted price chart"></canvas>
         <details class="json-wrap">
           <summary>Raw API response</summary>
           <pre id="jsonDump">{}</pre>
