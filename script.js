@@ -120,8 +120,12 @@ function drawChart(points = [], smooth = false) {
   const min = Math.min(...prices);
   const max = Math.max(...prices);
 
-  const x = (i) => pad + (i / (points.length - 1 || 1)) * (w - pad * 2);
-  const y = (v) => h - pad - ((v - min) / (max - min || 1)) * (h - pad * 2);
+  const xStep = (w - pad * 2) / (points.length - 1);
+  const yRange = max - min;
+  const yScale = (h - pad * 2) / (yRange || 1);
+
+  const x = (i) => pad + i * xStep;
+  const y = (price) => h - pad - (price - min) * yScale;
 
   // line
   ctx.beginPath();
@@ -138,6 +142,7 @@ function drawChart(points = [], smooth = false) {
       ctx.lineTo(x(i), y(prices[i]));
     }
   }
+
   ctx.stroke();
 
   // fill
@@ -151,30 +156,75 @@ function drawChart(points = [], smooth = false) {
   ctx.closePath();
   ctx.fillStyle = grad;
   ctx.fill();
+
+  // dots
+  ctx.fillStyle = getCSSVar("--chart-line") || "#6366f1";
+  for (let i = 0; i < points.length; i++) {
+    ctx.beginPath();
+    ctx.arc(x(i), y(prices[i]), 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function setLoading(isLoading) {
-  els.btn.classList.toggle("loading", isLoading);
   els.btn.disabled = isLoading;
+  els.input.disabled = isLoading;
+  if (els.btn.querySelector('.btn-label')) {
+    els.btn.querySelector('.btn-label').style.opacity = isLoading ? '0' : '1';
+  }
+  if (els.btn.querySelector('.spinner')) {
+    els.btn.querySelector('.spinner').style.display = isLoading ? 'inline-block' : 'none';
+  }
+}
+
+function processData(data, ticker) {
+  const points = data.predictions || data.points || [];
+  
+  const listHTML = points.map((p) => {
+    const priceStr = `$${fmt(p.price)}`;
+    return `<li><b>${p.date}:</b> ${priceStr}</li>`;
+  }).join('');
+
+  els.list.innerHTML = listHTML || '<li class="muted">No predictions available</li>';
+  els.meta.ticker.textContent = data.ticker ?? ticker;
+  els.meta.updated.textContent = data.last_updated?.split('T')[0] ?? data.updated ?? "—";
+
+  if (points && points.length > 1) {
+    const start = points[0].price;
+    const end = points[points.length - 1].price;
+    const delta = end - start;
+    const pct = (delta / (start || 1)) * 100;
+
+    els.meta.start.textContent = `$${fmt(start)}`;
+    els.meta.end.textContent = `$${fmt(end)}`;
+    els.meta.change.textContent = `${delta >= 0 ? "+" : ""}$${fmt(delta)}`;
+    els.meta.changePct.textContent = `${delta >= 0 ? "+" : ""}${fmt(pct)}%`;
+  } else {
+    els.meta.start.textContent = els.meta.end.textContent =
+      els.meta.change.textContent = els.meta.changePct.textContent = "—";
+  }
+
+  els.json.textContent = JSON.stringify(data, null, 2);
+  drawChart(points, els.smooth.checked);
+  toast("ok", `Prediction for ${data.ticker ?? ticker} loaded successfully!`);
 }
 
 /******************************
  * Fetch / Render
  *****************************/
 async function fetchPrediction() {
-  const ticker = els.input.value.trim().toUpperCase();
+  const ticker = els.input.value.toUpperCase().trim();
   if (!ticker) {
-    toast("err", "Please enter a ticker symbol.");
+    toast("err", "Please enter a stock ticker.");
     return;
   }
-
-  setLoading(true);
   clearList();
+  setLoading(true);
   toast("info", `Fetching prediction for ${ticker}…`);
 
   try {
     const days = 7;
-    const url = `http://127.0.0.1:5000/predict?ticker=${encodeURIComponent(ticker)}&days=${days}`;
+    const url = `http://127.0.0.1:5000/api/predict?ticker=${encodeURIComponent(ticker)}&days=${days}`;
 
     // Optional: timeout wrapper
     const controller = new AbortController();
@@ -182,7 +232,11 @@ async function fetchPrediction() {
     const res = await fetch(url, { signal: controller.signal });
     clearTimeout(t);
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${res.status}`);
+    }
+    
     const data = await res.json();
 
     if (data.error) {
@@ -192,45 +246,17 @@ async function fetchPrediction() {
       return;
     }
 
-    // Render meta
-    els.meta.ticker.textContent = data.ticker ?? ticker;
-    els.meta.updated.textContent = new Date().toLocaleString();
-    els.list.innerHTML = "";
+    processData(data, ticker);
+    setLoading(false);
 
-    const points = (data.predictions ?? []).map(p => ({
-      date: p.date,
-      price: Number(p.price),
-    }));
-
-    points.forEach(p => {
-      const li = document.createElement("li");
-      li.textContent = `Date: ${p.date} • $${fmt(p.price)}`;
-      els.list.appendChild(li);
-    });
-
-    if (points.length) {
-      const start = points[0].price;
-      const end = points[points.length - 1].price;
-      const delta = end - start;
-      const pct = (delta / (start || 1)) * 100;
-
-      els.meta.start.textContent = `$${fmt(start)}`;
-      els.meta.end.textContent = `$${fmt(end)}`;
-      els.meta.change.textContent = `${delta >= 0 ? "+" : ""}$${fmt(delta)}`;
-      els.meta.changePct.textContent = `${delta >= 0 ? "+" : ""}${fmt(pct)}%`;
-    } else {
-      els.meta.start.textContent = els.meta.end.textContent =
-      els.meta.change.textContent = els.meta.changePct.textContent = "—";
-    }
-
-    els.json.textContent = JSON.stringify(data, null, 2);
-    drawChart(points, els.smooth.checked);
-    toast("ok", `Prediction for ${data.ticker ?? ticker} retrieved successfully!`);
   } catch (err) {
-    console.error(err);
-    toast("err", `Failed to connect to the API. Is the backend running? (${err.message})`);
+    console.error("Fetch error:", err);
+    if (err.name === "AbortError") {
+      toast("err", "Request timed out. Please try again.");
+    } else {
+      toast("err", `Failed to fetch: ${err.message}`);
+    }
     drawChart([]);
-  } finally {
     setLoading(false);
   }
 }
@@ -243,7 +269,7 @@ els.input.addEventListener("keydown", (e) => { if (e.key === "Enter") fetchPredi
 els.smooth.addEventListener("change", () => {
   try {
     const obj = JSON.parse(els.json.textContent || "{}");
-    const points = (obj.predictions || []).map(p => ({ date: p.date, price: Number(p.price) }));
+    const points = obj.predictions || obj.points || [];
     drawChart(points, els.smooth.checked);
   } catch {}
 });

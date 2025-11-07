@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Register • Stock Predictor</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container head-wrap">
+      <h1 class="brand">Stock Predictor <span class="badge">MVP</span></h1>
+      <nav class="header-actions">
+        <a class="link" href="index.html">Prediction Tool</a>
+        <a class="link" href="README.md">Docs</a>
+        <a class="link" href="https://github.com/rcatalasan0/491-Project" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="panel" style="max-width: 480px; margin: 40px auto 0;">
+      <h2 style="margin-top: 0;">Create Your Account</h2>
+      <p class="muted">
+        Access watchlists and save your forecasts.
+      </p>
+
+      <form id="registerForm">
+        <div class="form-group" style="margin-bottom: 15px;">
+          <label for="email" style="display: block; margin-bottom: 5px; font-weight: 600;">Email Address</label>
+          <input id="email" type="email" placeholder="user@example.com" required />
+        </div>
+
+        <div class="form-group" style="margin-bottom: 15px;">
+          <label for="password" style="display: block; margin-bottom: 5px; font-weight: 600;">Password</label>
+          <input id="password" type="password" placeholder="••••••••" required />
+        </div>
+
+        <div class="form-group" style="margin-bottom: 25px;">
+          <label for="confirmPassword" style="display: block; margin-bottom: 5px; font-weight: 600;">Confirm Password</label>
+          <input id="confirmPassword" type="password" placeholder="••••••••" required />
+        </div>
+
+        <button type="submit" id="registerButton" style="width: 100%;">
+          Register
+        </button>
+
+        <div id="status" class="toast info" role="status" aria-live="polite" style="margin-top: 15px;"></div>
+      </form>
+
+      <p class="muted" style="margin-top: 20px; text-align: center; font-size: 14px;">
+        Already have an account? <a href="login.html" class="link" style="color: var(--brand);">Log in</a>
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>© 2025 Stock Predictor • Prototype UI</p>
+    </div>
+  </footer>
+
+  <script src="register.js"></script>
+</body>
+</html>

@@ -1,17 +1,13 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Stock Predictor • MVP</title>
 
-  <!-- Inter font for a modern look -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-
-  <!-- Mobile browser theme color (updated dynamically by JS) if we ever get there I don't think we will should just only be website on browser for computer -->
-  <meta id="metaThemeColor" name="theme-color" content="#ffffff">
 
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -20,18 +16,9 @@
     <div class="container head-wrap">
       <h1 class="brand">Stock Predictor <span class="badge">MVP</span></h1>
       <nav class="header-actions">
+        <a class="link" href="login.html">Sign Out</a>
         <a class="link" href="README.md">Docs</a>
         <a class="link" href="https://github.com/rcatalasan0/491-Project" target="_blank" rel="noreferrer">GitHub</a>
-
-        <!-- Theme toggle -->
-        <button id="themeToggle"
-                class="theme-toggle"
-                type="button"
-                aria-label="Toggle color theme"
-                aria-pressed="false"
-                title="Toggle dark mode">
-          <span class="theme-icon">🌙</span><span class="theme-text">Dark</span>
-        </button>
       </nav>
     </div>
   </header>
@@ -41,25 +28,20 @@
       <div class="hero-copy">
         <h2>Defense Sector Forecasts, Fast.</h2>
         <p class="muted">
-          Enter a ticker (e.g. <code>LMT</code>) to fetch a 7-day prediction. This UI calls your local API
-          at <code>http://127.0.0.1:5000/predict</code>.
+          Enter a ticker to fetch a 7-day prediction.
         </p>
-      </div>
 
-      <div class="controls">
-        <div class="row">
-          <input id="tickerInput" type="text" placeholder="Enter Ticker (e.g. LMT)" value="LMT" maxlength="5" />
-          <button id="predictButton">
-            <span class="btn-label">Get Prediction</span>
-            <span class="spinner" aria-hidden="true"></span>
-          </button>
+        <div class="input-wrap">
+          <input type="text" id="tickerInput" placeholder="LMT" />
+          <button id="predictButton">Predict</button>
         </div>
-        <div class="toolbar">
-          <label class="switch">
-            <input id="smoothToggle" type="checkbox" />
-            <span>Smooth chart line</span>
+
+        <div class="form-group" style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between;">
+          <label class="checkbox-wrap">
+            <input type="checkbox" id="smoothToggle" checked>
+            <span>Smooth Chart Lines</span>
           </label>
-          <span class="hint">Tip: try LMT, RTX, BA, NOC, LHX…</span>
+          <span class="hint">Tip: For this demo, try **LMT**, **RTX**, or **BA** (data from seed.sql).</span>
         </div>
 
         <div id="status" class="toast info" role="status" aria-live="polite"></div>
@@ -69,9 +51,9 @@
     <section class="grid">
       <article class="card">
         <h3>7-Day Price Projection</h3>
-        <canvas id="chart" width="800" height="360" role="img" aria-label="Predicted price chart"></canvas>
+        <canvas id="chart" width="800" height="360"></canvas>
         <details class="json-wrap">
-          <summary>Raw API response</summary>
+          <summary>Raw API response (Demo Data)</summary>
           <pre id="jsonDump">{}</pre>
         </details>
       </article>
@@ -102,10 +84,5 @@
   </footer>
 
   <script src="script.js"></script>
-  <title>Loading...</title>
-  <meta http-equiv="refresh" content="0; url=login.html">
-</head>
-<body>
-  <p>Redirecting to login...</p>
 </body>
 </html>
