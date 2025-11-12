@@ -7,103 +7,61 @@ const els = {
 };
 
 function toast(kind, msg) {
+  // Use the toast logic from style.css
   els.status.className = `toast ${kind} show`;
   els.status.textContent = msg;
 }
 
-function validateEmail(email) {
-  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return re.test(email);
-}
-
-function validatePassword(password) {
-  // At least 8 characters, 1 uppercase, 1 lowercase, 1 number
-  const minLength = password.length >= 8;
-  const hasUpper = /[A-Z]/.test(password);
-  const hasLower = /[a-z]/.test(password);
-  const hasNumber = /[0-9]/.test(password);
-  
-  return minLength && hasUpper && hasLower && hasNumber;
-}
-
 els.form.addEventListener("submit", async (e) => {
-  e.preventDefault();
+  e.preventDefault(); // Stop the default form submission
 
   const email = $("#email").value.trim();
   const password = $("#password").value;
   const confirmPassword = $("#confirmPassword").value;
 
-  // Client-side validation
-  if (!email) {
-    toast("err", "Email address is required.");
-    return;
-  }
-
-  if (!validateEmail(email)) {
-    toast("err", "Please enter a valid email address.");
-    return;
-  }
-
-  if (!password) {
-    toast("err", "Password is required.");
-    return;
-  }
-
-  if (!validatePassword(password)) {
-    toast("err", "Password must be at least 8 characters with uppercase, lowercase, and a number.");
-    return;
-  }
-
   if (password !== confirmPassword) {
-    toast("err", "Passwords do not match.");
+    toast("err", "Error: Passwords do not match.");
     return;
   }
 
-  // Disable form during submission
   els.btn.disabled = true;
-  els.btn.textContent = "Registering...";
-  toast("info", "Creating your account...");
-
+  toast("info", "Registering account...");
+  
   try {
-    // Send registration request to backend API
-    const response = await fetch("/api/register", {
-      method: "POST",
+    // ⚡️ API CALL: Send registration data to the Flask backend
+    const response = await fetch("http://127.0.0.1:5000/api/register", {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        email: email,
-        password: password,
-      }),
+      // Send email and password in the request body
+      body: JSON.stringify({ email, password }),
     });
 
     const data = await response.json();
-
-    if (response.ok) {
+    
+    if (response.status === 201) { // HTTP 201 Created
       // Registration successful
-      toast("ok", `✅ Registration Successful! Account created for ${email}. Redirecting to login...`);
+      toast("ok", `Success! Account created for ${email}. Redirecting to login...`);
       els.form.reset();
       
-      // Redirect to login page after 2 seconds
+      // Redirect to the login page after successful registration
       setTimeout(() => {
-        window.location.href = "login.html";
-      }, 2000);
-      
+        window.location.href = 'login.html';
+      }, 1500);
+
     } else {
-      // Handle error response from server
-      const errorMsg = data.error || data.message || "Registration failed. Please try again.";
-      toast("err", errorMsg);
-      els.btn.disabled = false;
-      els.btn.textContent = "Register";
+      // Registration failed (e.g., 400 validation, 409 conflict)
+      const errorMsg = data.error || "Registration failed due to an unknown error.";
+      toast("err", `Error: ${errorMsg}`);
     }
-    
+
   } catch (error) {
-    // Network or other errors
-    console.error("Registration error:", error);
-    toast("err", "Unable to connect to server. Please check your connection and try again.");
+    console.error("Network or API error:", error);
+    toast("err", "A network error occurred. Check the server connection.");
+  } finally {
     els.btn.disabled = false;
-    els.btn.textContent = "Register";
   }
 });
 
-toast("info", "Enter your details to create an account.");
+toast("info", "Enter your details to register.");
