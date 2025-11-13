@@ -10,7 +10,7 @@ INSERT INTO stocks (symbol, name, sector, exchange) VALUES
 ('LHX', 'L3Harris Technologies Inc', 'defense', 'NYSE'),
 ('GD', 'General Dynamics Corporation', 'defense', 'NYSE'),
 ('HII', 'Huntington Ingalls Industries, Inc.', 'defense', 'NYSE'),
-('BAESY', 'BAE Systems plc', 'defense', 'OTC')
+('BAESY', 'BAE Systems plc', 'defense', 'OTC'),  -- ✅ ADDED COMMA HERE
 ('TXT', 'Textron Inc.', 'defense', 'NYSE'),
 ('LDOS', 'Leidos Holdings, Inc.', 'defense', 'NYSE'),
 ('CW', 'Curtiss-Wright Corporation', 'defense', 'NYSE'),
