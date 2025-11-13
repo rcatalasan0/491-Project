@@ -50,7 +50,7 @@ def stockData_all(ticker: str) -> pd.DataFrame:
 
 # input is the dataframe
 # USE THIS FOR DISPLAY
-def stockData_summary(df: pd.DataFrame) -> list:
+def stockData_summary(df: pd.DataFrame) -> pd.DataFrame:
     summaries = []
 
     for date, row in df.iterrows():
@@ -76,7 +76,7 @@ def stockData_summary(df: pd.DataFrame) -> list:
             "TrendBias": f"{trend_bias:.6f}"
         })
 
-    return summaries
+    return pd.DataFrame(summaries)
 
 """
 #EXAMPLE USAGE
