@@ -94,3 +94,25 @@ COMMENT ON TABLE prices IS 'OHLCV price data for technical analysis';
 COMMENT ON TABLE indicators IS 'Technical indicators and market analysis data';
 COMMENT ON TABLE users IS 'User accounts for portfolio tracking';
 COMMENT ON TABLE watchlist IS 'User-curated stock watchlists';
+
+-- Sprint 3: Authentication security enhancements
+
+-- Add failed login tracking + account lockout fields
+ALTER TABLE users
+    ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN locked_until   TIMESTAMP NULL;
+
+-- Authentication audit log for tracking login and registration events
+CREATE TABLE IF NOT EXISTS auth_audit (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    email VARCHAR(255) NOT NULL,
+    action VARCHAR(50) NOT NULL,      -- 'register', 'login_success', 'login_failed'
+    ip_address VARCHAR(50),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_auth_audit_email ON auth_audit(email);
+CREATE INDEX idx_auth_audit_action ON auth_audit(action);
+
+
