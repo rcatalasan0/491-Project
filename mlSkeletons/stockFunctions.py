@@ -74,6 +74,13 @@ def stockData_summary(df: pd.DataFrame) -> pd.DataFrame:
     summary_df.index.name = "Date"
     return summary_df
 
+# simple preprocessing; no removal of outliers on this step... yet...
+def stockData_preprocess(data):
+    df = data.copy()
+    df = df.dropna(subset=['Open','High','Low','Close','Volume',
+                           'WeightedAveragePrice','TrendBias'])
+    return df
+
 """
 #EXAMPLE USAGE
 if __name__ == "__main__":
