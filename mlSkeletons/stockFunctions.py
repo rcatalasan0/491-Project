@@ -54,29 +54,25 @@ def stockData_summary(df: pd.DataFrame) -> pd.DataFrame:
     summaries = []
 
     for date, row in df.iterrows():
-        # Extract price components
         OPEN = row['Open']
         HIGH = row['High']
         LOW = row['Low']
         CLOSE = row['Close']
 
-        # computing metrics
         avg_price = (OPEN + HIGH + LOW + CLOSE) / 4
         weighted_avg_price = (OPEN + HIGH + LOW + 2 * CLOSE) / 5
+        trend_bias = (CLOSE - OPEN) / (HIGH - LOW) if (HIGH - LOW) != 0 else 0
 
-        if (HIGH - LOW) != 0:
-            trend_bias = (CLOSE - OPEN) / (HIGH - LOW)
-        else:
-            trend_bias = 0
-
+        # numeric values only — no f-strings
         summaries.append({
-            "Date": date.strftime("%Y-%m-%d"),
-            "AveragePrice": f"{avg_price:.2f}",
-            "WeightedAveragePrice": f"{weighted_avg_price:.2f}",
-            "TrendBias": f"{trend_bias:.6f}"
+            "AveragePrice": avg_price,
+            "WeightedAveragePrice": weighted_avg_price,
+            "TrendBias": trend_bias
         })
 
-    return pd.DataFrame(summaries)
+    summary_df = pd.DataFrame(summaries, index=df.index)
+    summary_df.index.name = "Date"
+    return summary_df
 
 """
 #EXAMPLE USAGE
