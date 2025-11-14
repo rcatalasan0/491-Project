@@ -30,6 +30,86 @@ def get_db_connection():
     except psycopg2.Error as e:
         print(f"Database connection error: {e}")
         return None
+    
+def record_auth_event(action, email, user_id=None):
+    """
+    Insert a simple authentication audit record.
+    This is best-effort: failures here should not break login or register.
+    """
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return
+
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO auth_audit (user_id, email, action, ip_address)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (user_id, email, action, request.remote_addr)
+        )
+        conn.commit()
+
+    except Exception as e:
+        print(f"Auth audit error: {e}")
+
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except:
+            pass
+
+import re   # make sure this is at your imports at the very top
+
+PASSWORD_REGEX = re.compile(
+    r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$"
+)
+# Explanation:
+# - at least 8 characters
+# - at least 1 lowercase
+# - at least 1 uppercase
+# - at least 1 digit
+
+def validate_password(password: str):
+    """
+    Validate password complexity.
+    Returns (valid: bool, message: str)
+    """
+    if not password:
+        return False, "Password is required."
+
+    if not PASSWORD_REGEX.match(password):
+        return False, (
+            "Password must be at least 8 characters long, contain "
+            "one uppercase letter, one lowercase letter, and one digit."
+        )
+
+    return True, ""
+
+from collections import defaultdict
+import time   # also ensure this is imported above
+
+LOGIN_RATE_LIMIT_WINDOW = 60     # seconds
+LOGIN_RATE_LIMIT_MAX = 10        # max attempts per IP per window
+login_attempts = defaultdict(list)
+
+def is_rate_limited(ip: str) -> bool:
+    """
+    Simple in-memory IP-based rate limiter for login attempts.
+    Returns True if the IP exceeded allowed login rate.
+    """
+    now = time.time()
+    attempts = login_attempts[ip]
+
+    # keep only attempts within time window
+    attempts = [t for t in attempts if now - t < LOGIN_RATE_LIMIT_WINDOW]
+    attempts.append(now)
+
+    login_attempts[ip] = attempts
+
+    return len(attempts) > LOGIN_RATE_LIMIT_MAX
 
 @app.route("/api/register", methods=["POST"])
 def register():
