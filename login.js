@@ -4,57 +4,101 @@ const els = {
   form: $("#loginForm"),
   btn: $("#loginButton"),
   status: $("#status"),
+  emailInput: $("#email"),
+  passwordInput: $("#password"),
 };
 
 function toast(kind, msg) {
-  // Use the toast logic from style.css
   els.status.className = `toast ${kind} show`;
   els.status.textContent = msg;
 }
 
 els.form.addEventListener("submit", async (e) => {
-  e.preventDefault(); // Stop the default form submission
+  e.preventDefault();
 
-  const email = $("#email").value.trim();
-  const password = $("#password").value;
+  const email = els.emailInput.value.trim();
+  const password = els.passwordInput.value;
+
+  if (!email || !password) {
+    toast("err", "Please enter both email and password.");
+    return;
+  }
 
   console.log(`Attempting login for: ${email}`);
+  
+  // Disable form during submission
   els.btn.disabled = true;
-  toast("info", "Authenticating...");
+  els.btn.textContent = "Logging in...";
+  els.emailInput.disabled = true;
+  els.passwordInput.disabled = true;
+  
+  toast("info", "Verifying credentials...");
 
   try {
-    // ⚡️ API CALL: Send login data to the Flask backend
+    // Send login request to backend API
     const response = await fetch("http://127.0.0.1:5000/api/login", {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
-      // Send email and password in the request body
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({
+        email: email,
+        password: password,
+      }),
     });
 
     const data = await response.json();
 
-    if (response.status === 200) { // HTTP 200 OK
+    if (response.ok) {
       // Login successful
-      toast("ok", `Login successful! Redirecting to prediction tool...`);
+      toast("ok", `✅ Login successful! Welcome back, ${email}. Redirecting...`);
       
-      // Redirect to the main prediction page
+      // Store user session (you can enhance this with JWT tokens later)
+      sessionStorage.setItem('user', JSON.stringify(data.user));
+      sessionStorage.setItem('userEmail', email);
+      sessionStorage.setItem('loginTime', new Date().toISOString());
+      
+      // Keep button disabled during redirect
+      els.btn.textContent = "Redirecting...";
+      
+      // Redirect to prediction tool
       setTimeout(() => {
-          window.location.href = 'prediction-tool.html';
-      }, 1000);
+        window.location.href = 'prediction-tool.html';
+      }, 1500);
       
     } else {
-      // Login failed (e.g., 401 Unauthorized, 400 validation)
-      const errorMsg = data.error || "Login failed.";
-      toast("err", `Error: ${errorMsg}`);
+      // Handle error response
+      const errorMsg = data.error || "Login failed. Please check your credentials.";
+      toast("err", errorMsg);
+      
+      // Re-enable form
+      els.btn.disabled = false;
+      els.btn.textContent = "Log In";
+      els.emailInput.disabled = false;
+      els.passwordInput.disabled = false;
+      
+      // Clear password field on error
+      els.passwordInput.value = "";
+      els.passwordInput.focus();
     }
+    
   } catch (error) {
-    console.error("Network or API error:", error);
-    toast("err", "A network error occurred. Check the server connection.");
-  } finally {
+    // Network or other errors
+    console.error("Login error:", error);
+    toast("err", "Unable to connect to server. Please make sure the Flask app is running.");
+    
+    // Re-enable form
     els.btn.disabled = false;
+    els.btn.textContent = "Log In";
+    els.emailInput.disabled = false;
+    els.passwordInput.disabled = false;
   }
 });
 
-toast("info", "Enter your email and password.");
+// Check if user just registered (coming from register page)
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('registered') === 'true') {
+  toast("ok", "✅ Registration successful! Please log in with your new account.");
+} else {
+  toast("info", "Enter your email and password.");
+}

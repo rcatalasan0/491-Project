@@ -81,6 +81,8 @@ els.form.addEventListener("submit", async (e) => {
   const password = els.passwordInput.value;
   const confirmPassword = els.confirmPasswordInput.value;
 
+  console.log("Registration form submitted", { email }); // Debug log
+
   // Client-side validation
   if (!email) {
     toast("err", "Email address is required.");
@@ -123,6 +125,8 @@ els.form.addEventListener("submit", async (e) => {
   toast("info", "Creating your account...");
 
   try {
+    console.log("Sending registration request..."); // Debug log
+    
     // Send registration request to backend API
     const response = await fetch("http://127.0.0.1:5000/api/register", {
       method: "POST",
@@ -135,11 +139,16 @@ els.form.addEventListener("submit", async (e) => {
       }),
     });
 
+    console.log("Response status:", response.status); // Debug log
+
     const data = await response.json();
+    console.log("Response data:", data); // Debug log
 
     if (response.ok) {
       // Registration successful
       toast("ok", `✅ Success! Account created for ${email}. Redirecting to login...`);
+      
+      console.log("Registration successful, redirecting..."); // Debug log
       
       // Clear form
       els.form.reset();
@@ -149,12 +158,14 @@ els.form.addEventListener("submit", async (e) => {
       
       // Redirect to login page after 2 seconds
       setTimeout(() => {
-        window.location.href = "login.html";
+        console.log("Redirecting now..."); // Debug log
+        window.location.href = "login.html?registered=true";
       }, 2000);
       
     } else {
       // Handle error response from server
       const errorMsg = data.error || data.message || "Registration failed. Please try again.";
+      console.error("Registration error:", errorMsg); // Debug log
       toast("err", errorMsg);
       
       // Re-enable form

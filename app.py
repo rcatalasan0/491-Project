@@ -6,12 +6,13 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import bcrypt
 import os
+import re
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # allows frontend to call this API
 
 # Database configuration
 DB_CONFIG = {
@@ -111,6 +112,23 @@ def is_rate_limited(ip: str) -> bool:
 
     return len(attempts) > LOGIN_RATE_LIMIT_MAX
 
+def validate_email(email):
+    """Validate email format"""
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
+def validate_password(password):
+    """Validate password strength"""
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long"
+    if not re.search(r'[A-Z]', password):
+        return False, "Password must contain at least one uppercase letter"
+    if not re.search(r'[a-z]', password):
+        return False, "Password must contain at least one lowercase letter"
+    if not re.search(r'[0-9]', password):
+        return False, "Password must contain at least one number"
+    return True, "Valid"
+
 @app.route("/api/register", methods=["POST"])
 def register():
     """Handle user registration"""
@@ -124,18 +142,19 @@ def register():
         if not email or not password:
             return jsonify({"error": "Email and password are required"}), 400
         
-        # Basic email validation
-        if '@' not in email or '.' not in email:
+        # Email validation
+        if not validate_email(email):
             return jsonify({"error": "Invalid email format"}), 400
         
-        # Password strength validation
-        if len(password) < 8:
-            return jsonify({"error": "Password must be at least 8 characters"}), 400
+        # Password validation
+        is_valid, message = validate_password(password)
+        if not is_valid:
+            return jsonify({"error": message}), 400
         
         # Connect to database
         conn = get_db_connection()
         if not conn:
-            return jsonify({"error": "Database connection failed"}), 500
+            return jsonify({"error": "Database connection failed. Please try again later."}), 500
         
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         
@@ -148,11 +167,13 @@ def register():
             existing_user = cursor.fetchone()
             
             if existing_user:
+                cursor.close()
+                conn.close()
                 return jsonify({
-                    "error": "An account with this email already exists"
+                    "error": "An account with this email already exists. Please login instead."
                 }), 409
             
-            # Hash password
+            # Hash password with bcrypt
             password_hash = bcrypt.hashpw(
                 password.encode('utf-8'),
                 bcrypt.gensalt()
@@ -161,8 +182,8 @@ def register():
             # Insert new user
             cursor.execute(
                 """
-                INSERT INTO users (email, password_hash, role)
-                VALUES (%s, %s, %s)
+                INSERT INTO users (email, password_hash, role, created_at)
+                VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
                 RETURNING id, email, created_at
                 """,
                 (email, password_hash, 'user')
@@ -171,8 +192,14 @@ def register():
             new_user = cursor.fetchone()
             conn.commit()
             
+            print(f"✅ New user registered: {email} (ID: {new_user['id']})")
+            
+            cursor.close()
+            conn.close()
+            
             return jsonify({
-                "message": "Registration successful",
+                "success": True,
+                "message": "Registration successful! Redirecting to login...",
                 "user": {
                     "id": new_user['id'],
                     "email": new_user['email'],
@@ -180,26 +207,26 @@ def register():
                 }
             }), 201
             
-        except psycopg2.IntegrityError:
+        except psycopg2.IntegrityError as e:
             conn.rollback()
+            cursor.close()
+            conn.close()
             return jsonify({
-                "error": "Email already registered"
+                "error": "Email already registered. Please use a different email."
             }), 409
             
         except Exception as e:
             conn.rollback()
+            cursor.close()
+            conn.close()
             print(f"Registration error: {e}")
             return jsonify({
                 "error": "Registration failed. Please try again."
             }), 500
             
-        finally:
-            cursor.close()
-            conn.close()
-            
     except Exception as e:
         print(f"Request error: {e}")
-        return jsonify({"error": "Invalid request"}), 400
+        return jsonify({"error": "Invalid request data"}), 400
 
 @app.route("/api/login", methods=["POST"])
 def login():
@@ -222,12 +249,14 @@ def login():
         try:
             # Get user from database
             cursor.execute(
-                "SELECT id, email, password_hash FROM users WHERE email = %s",
+                "SELECT id, email, password_hash, role FROM users WHERE email = %s",
                 (email,)
             )
             user = cursor.fetchone()
             
             if not user:
+                cursor.close()
+                conn.close()
                 return jsonify({"error": "Invalid email or password"}), 401
             
             # Verify password
@@ -239,23 +268,34 @@ def login():
                 )
                 conn.commit()
                 
+                print(f"✅ User logged in: {email} (ID: {user['id']})")
+                
+                cursor.close()
+                conn.close()
+                
                 return jsonify({
-                    "message": "Login successful",
+                    "success": True,
+                    "message": "Login successful!",
                     "user": {
                         "id": user['id'],
-                        "email": user['email']
+                        "email": user['email'],
+                        "role": user['role']
                     }
                 }), 200
             else:
+                cursor.close()
+                conn.close()
                 return jsonify({"error": "Invalid email or password"}), 401
                 
-        finally:
+        except Exception as e:
             cursor.close()
             conn.close()
+            print(f"Login error: {e}")
+            return jsonify({"error": "Login failed. Please try again."}), 500
             
     except Exception as e:
-        print(f"Login error: {e}")
-        return jsonify({"error": "Login failed"}), 500
+        print(f"Request error: {e}")
+        return jsonify({"error": "Invalid request data"}), 400
 
 @app.route("/health")
 def health():
@@ -270,14 +310,37 @@ def health():
             db_status = "connected"
         else:
             db_status = "disconnected"
-    except:
-        db_status = "error"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
     
     return jsonify({
         "status": "ok",
         "database": db_status,
         "timestamp": datetime.utcnow().isoformat()
     })
+
+@app.route("/api/users/count")
+def users_count():
+    """Get total number of registered users"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+        
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("SELECT COUNT(*) as count FROM users")
+        result = cursor.fetchone()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "total_users": result['count']
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting user count: {e}")
+        return jsonify({"error": "Failed to get user count"}), 500
 
 @app.get("/predict")
 def predict():
@@ -302,5 +365,50 @@ def predict():
         "predictions": preds
     })
 
+@app.route("/stocks")
+def get_stocks():
+    """Get all defense sector stocks"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+        
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("SELECT symbol, name, sector, exchange FROM stocks ORDER BY symbol")
+        stocks = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "stocks": stocks,
+            "count": len(stocks)
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting stocks: {e}")
+        return jsonify({"error": "Failed to get stocks"}), 500
+
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    host = os.getenv('HOST', '127.0.0.1')
+    port = int(os.getenv('PORT', 5000))
+    debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'
+    
+    print("=" * 60)
+    print("🚀 Stock Predictor - Starting Flask Server")
+    print("=" * 60)
+    print(f"📊 Database: {DB_CONFIG['database']} on {DB_CONFIG['host']}")
+    print(f"🌐 Server: http://{host}:{port}")
+    print(f"🔧 Debug Mode: {debug}")
+    print("=" * 60)
+    print("\n📝 Available Endpoints:")
+    print(f"   - http://{host}:{port}/health")
+    print(f"   - http://{host}:{port}/api/register (POST)")
+    print(f"   - http://{host}:{port}/api/login (POST)")
+    print(f"   - http://{host}:{port}/api/users/count")
+    print(f"   - http://{host}:{port}/predict?ticker=LMT&days=7")
+    print(f"   - http://{host}:{port}/stocks")
+    print("=" * 60)
+    print("\nPress CTRL+C to stop the server\n")
+    
+    app.run(host=host, port=port, debug=debug)
