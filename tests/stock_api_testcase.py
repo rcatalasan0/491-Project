@@ -221,3 +221,209 @@ class TestStockAPIIntegration:
             thread.join()
         
         assert all(status == 200 for status in results)
+
+# ---------------------------------------------------------------------------
+# Extra API + /predict endpoint tests for Sprint 3
+# ---------------------------------------------------------------------------
+
+@pytest.mark.api
+class TestHealthAndErrorStructure:
+    """Additional tests for /health, 404 and 500 handlers."""
+
+    def test_health_returns_expected_fields(self, client):
+        """API-H001: /health returns JSON with status + uptime."""
+        resp = client.get("/health")
+        assert resp.status_code == 200
+
+        data = resp.get_json()
+        assert data["status"] == "OK"
+        assert data["service"] == "stock-predictor-api"
+        assert "timestamp" in data
+        assert "uptime_seconds" in data
+        # uptime should always be non-negative
+        assert data["uptime_seconds"] >= 0
+
+    def test_404_error_structure(self, client):
+        """API-H002: 404 handler returns JSON structure (no HTML)."""
+        resp = client.get("/this/route/does/not/exist")
+        assert resp.status_code == 404
+
+        data = resp.get_json()
+        assert data["error"] == "Resource not found"
+        assert data["code"] == 404
+        assert data["path"] == "/this/route/does/not/exist"
+
+    def test_500_error_structure(self, client, monkeypatch):
+        """API-H003: 500 handler returns JSON payload."""
+
+        # Force an exception inside a view so we hit the 500 handler.
+        from app import app as flask_app
+
+        @flask_app.route("/boom-test")
+        def boom_test():
+            raise RuntimeError("forced test error")
+
+        resp = client.get("/boom-test")
+        assert resp.status_code == 500
+
+        data = resp.get_json()
+        assert data["error"] == "Internal server error"
+        assert data["code"] == 500
+        assert "forced test error" in data["message"]
+
+
+@pytest.mark.api
+class TestPredictEndpointValidation:
+    """Validation and security tests around the /predict endpoint."""
+
+    @pytest.mark.parametrize("days", ["0", "-1", "31", "100"])
+    def test_invalid_days_out_of_range(self, client, days):
+        """API-P001: days must be between 1 and 30."""
+        resp = client.get(f"/predict?ticker=LMT&days={days}")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "days must be between 1 and 30" in data["error"]
+
+    @pytest.mark.parametrize("days", ["abc", "3.5", "", "   "])
+    def test_invalid_days_not_integer(self, client, days):
+        """API-P002: non-integer days are rejected."""
+        url = f"/predict?ticker=LMT&days={days}"
+        resp = client.get(url)
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "days must be an integer" in data["error"] or "days parameter is required" in data["error"]
+
+    def test_missing_days_parameter(self, client):
+        """API-P003: missing days → 400."""
+        resp = client.get("/predict?ticker=LMT")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "days parameter is required" in data["error"]
+
+    def test_missing_ticker_parameter_predict(self, client):
+        """API-P004: missing ticker → 400."""
+        resp = client.get("/predict?days=7")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "ticker is required" in data["error"]
+
+    @pytest.mark.parametrize(
+        "ticker",
+        [
+            "LMT;",                # SQL-ish characters
+            "BA<script>",          # XSS-ish
+            "NOC DROP TABLE",      # spaces
+            "VERYVERYLONGTICKER",  # > 10 chars
+        ],
+    )
+    def test_invalid_ticker_rejected(self, client, ticker):
+        """API-P005: ticker must be alphanumeric <= 10 chars."""
+        resp = client.get(f"/predict?ticker={ticker}&days=5")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "ticker must be alphanumeric" in data["error"] or "ticker is required" in data["error"]
+
+    def test_unicode_ticker_rejected(self, client):
+        """API-P006: unicode / non-ASCII ticker values rejected."""
+        resp = client.get("/predict?ticker=テスト&days=5")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "ticker must be alphanumeric" in data["error"]
+
+    def test_valid_predict_structure(self, client):
+        """API-P007: happy path – JSON structure for /predict."""
+        resp = client.get("/predict?ticker=LMT&days=7")
+        assert resp.status_code == 200
+
+        data = resp.get_json()
+        assert data["ticker"] == "LMT"
+        assert data["days"] == 7
+        assert data["model"] == "baseline-linear-demo"
+        assert len(data["predictions"]) == 7
+
+        for i, row in enumerate(data["predictions"], start=1):
+            assert row["day"] == i
+            assert isinstance(row["predicted_price"], (int, float))
+
+    def test_predict_response_is_deterministic(self, client):
+        """API-P008: calling /predict twice with same params gives same sequence."""
+        url = "/predict?ticker=LMT&days=3"
+        r1 = client.get(url)
+        r2 = client.get(url)
+
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+
+        d1 = r1.get_json()["predictions"]
+        d2 = r2.get_json()["predictions"]
+        assert d1 == d2  # deterministic, good for regression tests
+
+
+@pytest.mark.api
+class TestStockEndpointEdgeCases:
+    """More coverage for /api/stocks/<ticker> edge conditions."""
+
+    def test_default_period_is_1y(self, client, monkeypatch):
+        """API-S001: /api/stocks/LMT uses 1y period by default."""
+
+        import app as app_module
+
+        called_args = {}
+
+        def fake_fetch_stock_history(ticker, period="1y"):
+            called_args["ticker"] = ticker
+            called_args["period"] = period
+            # minimal fake response for test
+            return [
+                {
+                    "date": "2025-01-01",
+                    "Open": 10.0,
+                    "High": 11.0,
+                    "Low": 9.5,
+                    "Close": 10.5,
+                    "Volume": 1234,
+                }
+            ]
+
+        monkeypatch.setattr(app_module, "fetch_stock_history", fake_fetch_stock_history)
+
+        resp = client.get("/api/stocks/LMT")
+        assert resp.status_code == 200
+
+        assert called_args["ticker"] == "LMT"
+        assert called_args["period"] == "1y"
+
+        data = resp.get_json()
+        assert data["ticker"] == "LMT"
+        assert data["period"] == "1y"
+        assert data["count"] == 1
+
+    def test_batch_endpoint_rejects_empty_body(self, client):
+        """API-S002: batch endpoint requires non-empty tickers list."""
+        resp = client.post("/api/stocks/batch", json={})
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert data["code"] == "INVALID_BODY"
+
+    def test_batch_endpoint_mixed_valid_invalid(self, client, monkeypatch):
+        """API-S003: batch returns per-ticker status for valid + invalid tickers."""
+        import app as app_module
+
+        def fake_fetch_stock_history(ticker, period="1y"):
+            if ticker.upper() == "LMT":
+                return [{"date": "2025-01-01", "Open": 1, "High": 1, "Low": 1, "Close": 1, "Volume": 1}]
+            from app import InvalidTickerError
+            raise InvalidTickerError(f"bad ticker {ticker}")
+
+        monkeypatch.setattr(app_module, "fetch_stock_history", fake_fetch_stock_history)
+
+        resp = client.post("/api/stocks/batch", json={"tickers": ["LMT", "BAD1"]})
+        assert resp.status_code == 200
+
+        data = resp.get_json()
+        assert data["requested"] == 2
+        assert len(data["stocks"]) == 2
+
+        statuses = {row["ticker"]: row["status"] for row in data["stocks"]}
+        assert statuses["LMT"] == "ok"
+        assert statuses["BAD1"] == "invalid"
