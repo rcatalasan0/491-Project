@@ -1,3 +1,14 @@
+import time
+import logging
+from collections import defaultdict
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+
+request_metrics = defaultdict(lambda: {"count": 0, "total_ms": 0.0})
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime, timedelta
@@ -13,6 +24,32 @@ load_dotenv()
 
 app = Flask(__name__)
 CORS(app)  # allows frontend to call this API
+
+@app.before_request
+def _start_timer():
+    request._start_time = time.time()
+@app.after_request
+def _record_metrics(response):
+    start = getattr(request, "_start_time", None)
+    if start is not None:
+        elapsed_ms = (time.time() - start) * 1000.0
+        path = request.endpoint or request.path
+
+        # Update in-memory metrics
+        metric = request_metrics[path]
+        metric["count"] += 1
+        metric["total_ms"] += elapsed_ms
+
+        logging.info(
+            "Request %s %s -> %s in %.2fms",
+            request.method,
+            request.path,
+            response.status_code,
+            elapsed_ms
+        )
+
+    return response
+
 
 # Database configuration
 DB_CONFIG = {
@@ -412,3 +449,14 @@ if __name__ == "__main__":
     print("\nPress CTRL+C to stop the server\n")
     
     app.run(host=host, port=port, debug=debug)
+    
+@app.route("/ops/metrics", methods=["GET"])
+def get_metrics():
+    summary = {}
+    for endpoint, m in request_metrics.items():
+        avg = m["total_ms"] / m["count"] if m["count"] > 0 else 0
+        summary[endpoint] = {
+            "count": m["count"],
+            "avg_ms": round(avg, 2),
+        }
+    return jsonify(summary)
