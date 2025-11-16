@@ -1,0 +1,42 @@
+name: Python Tests & Security Suite
+
+on:
+  push:
+    branches: [ main, develop, sprint3-auth-upgrades ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 🔧 Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || true
+          pip install pytest pytest-html pytest-cov flask yfinance
+
+      - name: 🧪 Run pytest suite
+        run: |
+          mkdir -p reports
+          pytest tests -q \
+            --maxfail=1 \
+            --disable-warnings \
+            --html=reports/pytest_sprint3.html \
+            --cov=.
+
+      - name: 📊 Upload pytest report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sprint3-pytest-report
+          path: reports/pytest_sprint3.html
