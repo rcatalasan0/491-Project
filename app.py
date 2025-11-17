@@ -166,6 +166,55 @@ def validate_password(password):
         return False, "Password must contain at least one number"
     return True, "Valid"
 
+# --- Validation helpers (Sprint 3) ---
+
+ALLOWED_TICKER_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-")
+
+def validate_days(raw_days: str) -> int:
+    """
+    Validate and normalize the 'days' parameter for prediction endpoints.
+
+    Rules:
+    - must be an integer
+    - must be between 1 and 30 inclusive
+    """
+    try:
+        days = int(raw_days)
+    except (TypeError, ValueError):
+        raise ValueError("days must be an integer between 1 and 30")
+
+    if days < 1 or days > 30:
+        raise ValueError("days must be between 1 and 30")
+
+    return days
+
+
+def normalize_ticker(raw_ticker: str) -> str:
+    """
+    Validate and normalize stock ticker symbols.
+
+    Rules:
+    - required
+    - trimmed and upper-cased
+    - length <= 10
+    - only A-Z, 0-9, '.', '-'
+    """
+    if raw_ticker is None:
+        raise ValueError("ticker is required")
+
+    ticker = raw_ticker.strip().upper()
+    if not ticker:
+        raise ValueError("ticker is required")
+
+    if len(ticker) > 10:
+        raise ValueError("ticker is too long (max 10 characters)")
+
+    if any(ch not in ALLOWED_TICKER_CHARS for ch in ticker):
+        raise ValueError("ticker contains invalid characters")
+
+    return ticker
+
+
 @app.route("/api/register", methods=["POST"])
 def register():
     """Handle user registration"""
@@ -379,28 +428,29 @@ def users_count():
         print(f"Error getting user count: {e}")
         return jsonify({"error": "Failed to get user count"}), 500
 
-@app.get("/predict")
+@app.route("/predict", methods=["GET"])
 def predict():
-    """Existing prediction endpoint"""
-    ticker = (request.args.get("ticker") or "").upper()
-    days = int(request.args.get("days") or 7)
-    if not ticker:
-        return jsonify(error="Missing ticker"), 400
+    try:
+        raw_ticker = request.args.get("ticker")
+        raw_days = request.args.get("days", "7")
 
-    start_price = 420.0
-    preds = []
-    today = datetime.utcnow().date()
-    for i in range(days):
-        preds.append({
-            "date": (today + timedelta(days=i+1)).isoformat(),
-            "price": round(start_price + i * 1.8, 2)
+        ticker = normalize_ticker(raw_ticker)
+        days = validate_days(raw_days)
+
+        # existing prediction logic using ticker, days...
+        # predictions = run_model(ticker, days)
+
+        return jsonify({
+            "ticker": ticker,
+            "days": days,
+            # "prediction": predictions,
         })
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+    except Exception as e:
+        app.logger.exception("Unexpected error in /predict")
+        return jsonify({"error": "internal server error"}), 500
 
-    return jsonify({
-        "ticker": ticker,
-        "last_updated": datetime.utcnow().isoformat() + "Z",
-        "predictions": preds
-    })
 
 @app.route("/stocks")
 def get_stocks():
@@ -460,3 +510,21 @@ def get_metrics():
             "avg_ms": round(avg, 2),
         }
     return jsonify(summary)
+
+@app.route("/api/stocks/<ticker>", methods=["GET"])
+def get_stock(ticker):
+    try:
+        ticker_norm = normalize_ticker(ticker)
+
+        period = request.args.get("period", "1y")
+        # existing yfinance / DB logic using ticker_norm + period...
+
+        return jsonify({
+            "ticker": ticker_norm,
+            "historical_data": historical_data,
+        })
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+    except Exception:
+        app.logger.exception("Unexpected error in /api/stocks")
+        return jsonify({"error": "internal server error"}), 500

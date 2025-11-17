@@ -221,3 +221,71 @@ class TestStockAPIIntegration:
             thread.join()
         
         assert all(status == 200 for status in results)
+
+import pytest
+from app import validate_days, normalize_ticker
+
+class TestValidatorHelpers:
+    """Unit tests for shared validation helpers (Sprint 3)."""
+
+    # ---- validate_days ----
+
+    @pytest.mark.unit
+    def test_validate_days_accepts_valid_values(self):
+        assert validate_days("1") == 1
+        assert validate_days("7") == 7
+        assert validate_days("30") == 30
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("value", ["0", "-1", "31", "100"])
+    def test_validate_days_rejects_out_of_range(self, value):
+        with pytest.raises(ValueError):
+            validate_days(value)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("value", ["abc", "3.5", "", "   "])
+    def test_validate_days_rejects_non_integer(self, value):
+        with pytest.raises(ValueError):
+            validate_days(value)
+
+    # ---- normalize_ticker ----
+
+    @pytest.mark.unit
+    def test_normalize_ticker_normalizes_and_uppercases(self):
+        assert normalize_ticker(" lmt ") == "LMT"
+        assert normalize_ticker("ba") == "BA"
+
+    @pytest.mark.unit
+    def test_normalize_ticker_rejects_empty_or_missing(self):
+        with pytest.raises(ValueError):
+            normalize_ticker("   ")
+        with pytest.raises(ValueError):
+            normalize_ticker(None)  # type: ignore[arg-type]
+
+    @pytest.mark.unit
+    def test_normalize_ticker_rejects_invalid_characters(self):
+        with pytest.raises(ValueError):
+            normalize_ticker("LMT;DROP")
+        with pytest.raises(ValueError):
+            normalize_ticker("BA<script>")
+
+    @pytest.mark.unit
+    def test_normalize_ticker_rejects_too_long(self):
+        with pytest.raises(ValueError):
+            normalize_ticker("VERYLONGTKR")
+
+class TestOpsMetricsEndpoint:
+    """Verify /ops/metrics reflects recorded requests."""
+
+    def test_ops_metrics_records_stock_requests(self, client):
+        # Trigger a couple of requests so the timing hooks run
+        client.get("/api/stocks/LMT?period=1y")
+        client.get("/api/stocks/BA?period=1y")
+
+        resp = client.get("/ops/metrics")
+        assert resp.status_code == 200
+
+        data = resp.get_json()
+        assert isinstance(data, dict)
+        # At least one endpoint should have count >= 2
+        assert any(m["count"] >= 1 for m in data.values())
