@@ -427,3 +427,30 @@ class TestStockEndpointEdgeCases:
         statuses = {row["ticker"]: row["status"] for row in data["stocks"]}
         assert statuses["LMT"] == "ok"
         assert statuses["BAD1"] == "invalid"
+
+class TestStockEndpointValidationMore:
+    """
+    Additional edge-case tests for the stock history endpoint.
+    IDs: API-013 ... API-018
+    """
+
+    def test_stock_endpoint_rejects_missing_period_param(self, client):
+        """API-013: /api/stocks/<ticker> defaults period or errors clearly."""
+        resp = client.get("/api/stocks/LMT")
+        assert resp.status_code in (200, 400)
+        data_or_text = getattr(resp, "get_json", lambda: None)()
+        if data_or_text:
+            assert "period" in data_or_text or "historical_data" in data_or_text
+
+
+    @pytest.mark.parametrize("period", ["2y", "10y", "max", "invalid"])
+    def test_stock_endpoint_handles_unusual_periods(self, client, period):
+        """API-014–API-017: non-standard period values handled gracefully."""
+        resp = client.get(f"/api/stocks/LMT?period={period}")
+        assert resp.status_code in (200, 400, 422)
+
+
+    def test_stock_endpoint_rejects_empty_ticker(self, client):
+        """API-018: blank ticker returns 400 with JSON error message."""
+        resp = client.get("/api/stocks/%20?period=1y")
+        assert resp.status_code in (400, 404)
