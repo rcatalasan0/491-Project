@@ -1,3 +1,6 @@
+/******************************
+ * Helpers / DOM
+ *****************************/
 const $ = (sel) => document.querySelector(sel);
 
 const els = {
@@ -8,6 +11,8 @@ const els = {
   json: $("#jsonDump"),
   chart: $("#chart"),
   smooth: $("#smoothToggle"),
+  themeBtn: $("#themeToggle"),
+  metaTheme: $("#metaThemeColor"),
   meta: {
     ticker: $("#m-ticker"),
     updated: $("#m-updated"),
@@ -16,58 +21,6 @@ const els = {
     change: $("#m-change"),
     changePct: $("#m-changePct"),
   },
-};
-
-// ⚡️ NEW: Hardcoded demo data extracted from seed.sql (Last 7 prices used to simulate a prediction)
-const DEMO_DATA = {
-  // Lockheed Martin (LMT) data
-  "LMT": {
-    ticker: "LMT",
-    updated: "2025-09-17",
-    points: [
-      { date: "2025-09-11", price: 421.15 },
-      { date: "2025-09-12", price: 425.67 },
-      { date: "2025-09-13 (Proj)", price: 426.50 }, // Simulated point
-      { date: "2025-09-14 (Proj)", price: 427.45 }, // Simulated point
-      { date: "2025-09-15", price: 427.89 },
-      { date: "2025-09-16", price: 428.30 },
-      { date: "2025-09-17", price: 429.85 }
-    ]
-  },
-  // Raytheon (RTX) data
-  "RTX": {
-    ticker: "RTX",
-    updated: "2025-09-17",
-    points: [
-      { date: "2025-09-11", price: 111.75 },
-      { date: "2025-09-12", price: 112.85 },
-      { date: "2025-09-13 (Proj)", price: 113.10 },
-      { date: "2025-09-14 (Proj)", price: 113.50 },
-      { date: "2025-09-15", price: 113.95 },
-      { date: "2025-09-16", price: 113.80 },
-      { date: "2025-09-17", price: 114.90 }
-    ]
-  },
-  // Boeing (BA) data
-  "BA": {
-    ticker: "BA",
-    updated: "2025-09-17",
-    points: [
-      { date: "2025-09-11", price: 173.25 },
-      { date: "2025-09-12", price: 175.60 },
-      { date: "2025-09-13 (Proj)", price: 176.50 },
-      { date: "2025-09-14 (Proj)", price: 177.00 },
-      { date: "2025-09-15", price: 177.85 },
-      { date: "2025-09-16", price: 178.25 },
-      { date: "2025-09-17", price: 180.35 }
-    ]
-  },
-  // Default data for non-demo tickers
-  "DEFAULT": {
-    ticker: "—",
-    updated: "—",
-    points: []
-  }
 };
 
 function toast(kind, msg) {
@@ -83,13 +36,82 @@ function fmt(n, d = 2) {
   return Number(n).toFixed(d);
 }
 
-function drawChart(points, smooth = false) {
+/******************************
+ * Theme Toggle (persistent, system-aware)
+ *****************************/
+(function initTheme() {
+  const root = document.documentElement;
+  const STORAGE_KEY = "pref-theme";
+  const THEMES = { LIGHT: "light", DARK: "dark" };
+
+  // initial theme: saved -> system -> light
+  const saved = localStorage.getItem(STORAGE_KEY);
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const startTheme = saved || (prefersDark ? THEMES.DARK : THEMES.LIGHT);
+  applyTheme(startTheme);
+
+  // event
+  if (els.themeBtn) {
+    els.themeBtn.addEventListener("click", () => {
+      const next = root.dataset.theme === THEMES.DARK ? THEMES.LIGHT : THEMES.DARK;
+      applyTheme(next);
+      localStorage.setItem(STORAGE_KEY, next);
+    });
+  }
+
+  function applyTheme(theme) {
+    root.setAttribute("data-theme", theme);
+    updateToggleUI(theme === THEMES.DARK);
+    updateMetaTheme(theme === THEMES.DARK ? "#0b1220" : "#ffffff");
+    // Repaint chart to use theme colors if data exists
+    try {
+      const obj = JSON.parse(els.json.textContent || "{}");
+      const points = (obj.predictions || []).map(p => ({ date: p.date, price: Number(p.price) }));
+      drawChart(points, els.smooth.checked);
+    } catch {}
+  }
+
+  function updateToggleUI(isDark) {
+    if (!els.themeBtn) return;
+    els.themeBtn.setAttribute("aria-pressed", String(isDark));
+    const icon = els.themeBtn.querySelector(".theme-icon");
+    const text = els.themeBtn.querySelector(".theme-text");
+    if (icon) icon.textContent = isDark ? "☀️" : "🌙";
+    if (text) text.textContent = isDark ? "Light" : "Dark";
+  }
+
+  function updateMetaTheme(color) {
+    if (els.metaTheme) els.metaTheme.setAttribute("content", color);
+  }
+})();
+
+/******************************
+ * Chart (Canvas)
+ *****************************/
+function getCSSVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function drawChart(points = [], smooth = false) {
   const ctx = els.chart.getContext("2d");
   const w = els.chart.width, h = els.chart.height;
   ctx.clearRect(0, 0, w, h);
 
+  // grid
+  const pad = 10;
+  const gridColor = getCSSVar("--grid") || "rgba(148,163,184,.15)";
+  ctx.strokeStyle = gridColor;
+  ctx.lineWidth = 1;
+  [0, 0.25, 0.5, 0.75, 1].forEach(t => {
+    ctx.beginPath();
+    const yy = pad + t * (h - pad * 2);
+    ctx.moveTo(pad, yy);
+    ctx.lineTo(w - pad, yy);
+    ctx.stroke();
+  });
+
   if (!points || points.length === 0) {
-    ctx.fillStyle = "#9ca3af";
+    ctx.fillStyle = getCSSVar("--muted") || "#9ca3af";
     ctx.fillText("No data", 20, 24);
     return;
   }
@@ -97,72 +119,75 @@ function drawChart(points, smooth = false) {
   const prices = points.map(p => p.price);
   const min = Math.min(...prices);
   const max = Math.max(...prices);
-  const pad = 10;
 
   const xStep = (w - pad * 2) / (points.length - 1);
   const yRange = max - min;
   const yScale = (h - pad * 2) / (yRange || 1);
 
-  ctx.strokeStyle = "#4f46e5";
-  ctx.lineWidth = 2;
+  const x = (i) => pad + i * xStep;
+  const y = (price) => h - pad - (price - min) * yScale;
+
+  // line
   ctx.beginPath();
-
-  const getPos = (i, price) => ({
-    x: pad + i * xStep,
-    y: h - pad - (price - min) * yScale,
-  });
-
-  const getPoint = (i) => getPos(i, points[i].price);
-
-  // Line drawing
-  const startPoint = getPoint(0);
-  ctx.moveTo(startPoint.x, startPoint.y);
-
-  if (smooth) {
-    for (let i = 0; i < points.length - 1; i++) {
-      const p1 = getPoint(i);
-      const p2 = getPoint(i + 1);
-      const ctrlX = (p1.x + p2.x) / 2;
-
-      ctx.bezierCurveTo(ctrlX, p1.y, ctrlX, p2.y, p2.x, p2.y);
-    }
-  } else {
-    for (let i = 1; i < points.length; i++) {
-      const p = getPoint(i);
-      ctx.lineTo(p.x, p.y);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = getCSSVar("--chart-line") || "#6366f1";
+  ctx.moveTo(x(0), y(prices[0]));
+  for (let i = 1; i < points.length; i++) {
+    if (smooth) {
+      const x0 = x(i - 1), y0 = y(prices[i - 1]);
+      const x1 = x(i), y1 = y(prices[i]);
+      const cx = (x0 + x1) / 2;
+      ctx.bezierCurveTo(cx, y0, cx, y1, x1, y1);
+    } else {
+      ctx.lineTo(x(i), y(prices[i]));
     }
   }
 
   ctx.stroke();
 
-  // Dots
-  ctx.fillStyle = "#6366f1";
-  points.forEach((_, i) => {
-    const p = getPoint(i);
+  // fill
+  const top = getCSSVar("--chart-fill-top") || "rgba(99,102,241,.35)";
+  const bottom = getCSSVar("--chart-fill-bottom") || "rgba(99,102,241,0)";
+  const grad = ctx.createLinearGradient(0, pad, 0, h - pad);
+  grad.addColorStop(0, top);
+  grad.addColorStop(1, bottom);
+  ctx.lineTo(w - pad, h - pad);
+  ctx.lineTo(pad, h - pad);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // dots
+  ctx.fillStyle = getCSSVar("--chart-line") || "#6366f1";
+  for (let i = 0; i < points.length; i++) {
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+    ctx.arc(x(i), y(prices[i]), 3, 0, Math.PI * 2);
     ctx.fill();
-  });
+  }
 }
 
 function setLoading(isLoading) {
   els.btn.disabled = isLoading;
   els.input.disabled = isLoading;
-  els.btn.textContent = isLoading ? "Fetching..." : "Predict";
+  if (els.btn.querySelector('.btn-label')) {
+    els.btn.querySelector('.btn-label').style.opacity = isLoading ? '0' : '1';
+  }
+  if (els.btn.querySelector('.spinner')) {
+    els.btn.querySelector('.spinner').style.display = isLoading ? 'inline-block' : 'none';
+  }
 }
 
 function processData(data, ticker) {
-  const points = data.points;
+  const points = data.predictions || data.points || [];
+  
   const listHTML = points.map((p) => {
-    const isProjected = p.date.includes('(Proj)');
     const priceStr = `$${fmt(p.price)}`;
-    const style = isProjected ? 'style="font-style: italic; opacity: 0.8;"' : '';
-    return `<li ${style}><b>${p.date.replace(' (Proj)', '')}:</b> ${priceStr}</li>`;
+    return `<li><b>${p.date}:</b> ${priceStr}</li>`;
   }).join('');
 
-  els.list.innerHTML = listHTML;
+  els.list.innerHTML = listHTML || '<li class="muted">No predictions available</li>';
   els.meta.ticker.textContent = data.ticker ?? ticker;
-  els.meta.updated.textContent = data.updated ?? "—";
+  els.meta.updated.textContent = data.last_updated?.split('T')[0] ?? data.updated ?? "—";
 
   if (points && points.length > 1) {
     const start = points[0].price;
@@ -181,10 +206,12 @@ function processData(data, ticker) {
 
   els.json.textContent = JSON.stringify(data, null, 2);
   drawChart(points, els.smooth.checked);
-  toast("ok", `Demo prediction for ${data.ticker ?? ticker} loaded successfully!`);
+  toast("ok", `Prediction for ${data.ticker ?? ticker} loaded successfully!`);
 }
 
-// ⚡️ NEW LOGIC: Use demo data instead of fetching from API
+/******************************
+ * Fetch / Render
+ *****************************/
 async function fetchPrediction() {
   const ticker = els.input.value.toUpperCase().trim();
   if (!ticker) {
@@ -193,35 +220,60 @@ async function fetchPrediction() {
   }
   clearList();
   setLoading(true);
+  toast("info", `Fetching prediction for ${ticker}…`);
 
-  // Check for hardcoded demo data
-  const data = DEMO_DATA[ticker] ?? DEMO_DATA.DEFAULT;
+  try {
+    const days = 7;
+    const url = `http://127.0.0.1:5000/api/predict?ticker=${encodeURIComponent(ticker)}&days=${days}`;
 
-  if (data.ticker === "—") {
-    toast("err", `Ticker '${ticker}' not available in demo data. Please try LMT, RTX, or BA.`);
-    drawChart([]);
-  } else {
-    // Simulate network delay for a better demo experience
-    setTimeout(() => {
-      processData(data, ticker);
+    // Optional: timeout wrapper
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 10000); // 10s
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(t);
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${res.status}`);
+    }
+    
+    const data = await res.json();
+
+    if (data.error) {
+      toast("err", `Error: ${data.error}`);
+      drawChart([]);
       setLoading(false);
-    }, 500);
-    return; // Exit here since we are using demo data
+      return;
+    }
+
+    processData(data, ticker);
+    setLoading(false);
+
+  } catch (err) {
+    console.error("Fetch error:", err);
+    if (err.name === "AbortError") {
+      toast("err", "Request timed out. Please try again.");
+    } else {
+      toast("err", `Failed to fetch: ${err.message}`);
+    }
+    drawChart([]);
+    setLoading(false);
   }
-  
-  setLoading(false);
 }
 
-// events
+/******************************
+ * Events & Initial State
+ *****************************/
 els.btn.addEventListener("click", fetchPrediction);
 els.input.addEventListener("keydown", (e) => { if (e.key === "Enter") fetchPrediction(); });
 els.smooth.addEventListener("change", () => {
-  // re-render last response if available
   try {
     const obj = JSON.parse(els.json.textContent || "{}");
-    const points = obj.points || [];
+    const points = obj.predictions || obj.points || [];
     drawChart(points, els.smooth.checked);
-  } catch (err) {
-    // If json is empty or invalid, do nothing
-  }
+  } catch {}
 });
+
+// Initial empty chart + ready toast
+drawChart([]);
+toast("info", "Ready. Enter a ticker and click Get Prediction.");

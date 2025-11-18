@@ -1,0 +1,96 @@
+name: Deploy CI - Security and Containers
+
+on:
+  push:
+    branches: [ main ]
+  workflow_run:
+    workflows: ["Core CI - Build and Test"]
+    types:
+      - completed
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🔒 Run security scan
+      run: |
+        # Check for hardcoded secrets
+        echo "Checking for potential security issues..."
+        
+        # Look for hardcoded passwords/keys (basic check)
+        if grep -r "password.*=" src/ || grep -r "api_key.*=" src/; then
+          echo "⚠️  Warning: Potential hardcoded credentials found"
+          exit 1
+        fi
+        
+        # Check SQL injection patterns
+        if grep -r "query.*+.*input" src/; then
+          echo "⚠️  Warning: Potential SQL injection vulnerability"
+          exit 1
+        fi
+        
+        echo "✅ Basic security scan passed"
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [security-scan]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🐳 Build Docker image
+      run: |
+        docker build -t stock-predictor:latest .
+        
+    - name: 🧪 Test Docker container
+      run: |
+        # Start container and test basic functionality
+        docker run -d --name test-container -p 8080:8080 stock-predictor:latest
+        sleep 5
+        curl -f http://localhost:8080/health || exit 1
+        docker stop test-container
+        docker rm test-container
+
+    - name: 🏷️ Tag successful builds
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git tag -a "build-$(date +%Y%m%d-%H%M%S)" -m "Automated build tag"
+
+  sprint-deliverable-check:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: ✅ Verify Sprint 1 deliverables
+      run: |
+        echo "🎯 Checking Sprint 1 deliverables..."
+        
+        # Check required files exist
+        required_files=(
+          "src/main.cpp"
+          "database/schema.sql"
+          "database/seed.sql"
+          "tests/test_api.cpp"
+          "README.md"
+          "docs/Testing/TEST_PLAN.md"
+          "docs/Operations/NETWORK_MAP.md"
+          "docs/Security/THREAT_MODEL.md"
+        )
+        
+        for file in "${required_files[@]}"; do
+          if [ -f "$file" ]; then
+            echo "✅ $file exists"
+          else
+            echo "❌ $file missing"
+            exit 1
+          fi
+        done
+        
+        echo "🎉 All Sprint 1 deliverables present!"

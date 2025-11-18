@@ -1,0 +1,105 @@
+name: Core CI - Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: stock_predictor_test
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_pass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🔧 Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          libgtest-dev \
+          libpq-dev \
+          postgresql-client \
+          clang-tidy \
+          cppcheck
+
+    - name: 🗄️ Setup test database
+      run: |
+        export PGPASSWORD=test_pass
+        psql -h localhost -U test_user -d stock_predictor_test -f database/schema.sql
+        psql -h localhost -U test_user -d stock_predictor_test -f database/seed.sql
+      env:
+        PGPASSWORD: test_pass
+
+    - name: 🏗️ Build project
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+        make -j$(nproc)
+
+    - name: 🧪 Run unit tests
+      run: |
+        cd build
+        ctest --output-on-failure --verbose
+
+    - name: 🔍 Static code analysis
+      run: |
+        # Run cppcheck for static analysis
+        cppcheck --enable=all --error-exitcode=1 --suppress=missingIncludeSystem src/
+        
+        # Run clang-tidy (basic check)
+        find src/ -name "*.cpp" -exec clang-tidy {} -- -I./include \;
+
+    - name: 🚀 Integration test (API endpoints)
+      run: |
+        # Start the API server in background
+        cd build
+        ./stock_predictor_api &
+        API_PID=$!
+        
+        # Wait for server to start
+        sleep 2
+        
+        # Test endpoints with curl
+        echo "Testing /health endpoint..."
+        curl -f http://localhost:8080/health || exit 1
+        
+        echo "Testing /api/v1/stocks endpoint..."
+        curl -f http://localhost:8080/api/v1/stocks || exit 1
+        
+        echo "Testing /api/v1/stocks/LMT endpoint..."
+        curl -f http://localhost:8080/api/v1/stocks/LMT || exit 1
+        
+        # Clean up
+        kill $API_PID
+
+    - name: 📊 Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: |
+          build/test_results.xml
+          build/coverage.info

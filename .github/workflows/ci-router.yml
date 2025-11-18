@@ -1,0 +1,37 @@
+name: Router Tests - Lightweight CI
+
+on:
+  push:
+    branches: [ mock-api-ui, feature/* ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  router-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🔧 Install compiler & tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cppcheck clang-tidy
+
+      - name: 🧱 Build and run router tests
+        run: |
+          g++ -std=c++17 -O2 -DBUILD_TESTS main.cpp tests/router_test.cpp -o router_test
+          ./router_test
+
+      - name: 🔍 Static analysis
+        run: |
+          cppcheck --enable=all --suppress=missingIncludeSystem --error-exitcode=0 .
+          clang-tidy main.cpp tests/router_test.cpp -- -std=c++17 || true
+
+      - name: 📊 Upload test log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: router-test-log
+          path: router_test
