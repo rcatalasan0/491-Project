@@ -11,6 +11,8 @@ const els = {
   meta: {
     ticker: $("#m-ticker"),
     updated: $("#m-updated"),
+    // ADDED: New element for next-day ML prediction
+    nextPrice: $("#m-nextPrice"), 
     start: $("#m-start"),
     end: $("#m-end"),
     change: $("#m-change"),
@@ -51,19 +53,54 @@ function drawChart(points, smooth = false) {
   const yRange = max - min;
   const yScale = (h - pad * 2) / (yRange || 1);
 
-  ctx.strokeStyle = "#4f46e5";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-
   const getPos = (i, price) => ({
     x: pad + i * xStep,
     y: h - pad - (price - min) * yScale,
   });
 
   const getPoint = (i) => getPos(i, points[i].predicted_price);
-
-  // Line drawing
+  
+  // --- START AREA FILL LOGIC ---
+  ctx.beginPath();
   const startPoint = getPoint(0);
+  ctx.moveTo(startPoint.x, startPoint.y);
+
+  // 1. Define the line path
+  if (smooth) {
+    for (let i = 0; i < points.length - 1; i++) {
+      const p1 = getPoint(i);
+      const p2 = getPoint(i + 1);
+      const ctrlX = (p1.x + p2.x) / 2;
+      ctx.bezierCurveTo(ctrlX, p1.y, ctrlX, p2.y, p2.x, p2.y);
+    }
+  } else {
+    for (let i = 1; i < points.length; i++) {
+      const p = getPoint(i);
+      ctx.lineTo(p.x, p.y);
+    }
+  }
+
+  // 2. Close the path by connecting to the bottom corners
+  const lastPoint = getPoint(points.length - 1);
+  ctx.lineTo(lastPoint.x, h - pad); // Line down to bottom right padding edge
+  ctx.lineTo(pad, h - pad);          // Line across to bottom left padding edge
+  ctx.closePath();                   // Line up to the start point (optional, but good practice)
+  
+  // 3. Create and apply the gradient fill
+  const gradient = ctx.createLinearGradient(0, 0, 0, h);
+  gradient.addColorStop(0, "rgba(99, 102, 241, 0.4)"); // Top color (Blue, 40% opacity)
+  gradient.addColorStop(1, "rgba(99, 102, 241, 0.05)"); // Bottom color (Blue, 5% opacity)
+  
+  ctx.fillStyle = gradient;
+  ctx.fill();
+  // --- END AREA FILL LOGIC ---
+  
+  // --- LINE STROKE LOGIC (Redrawn over the fill for clarity) ---
+  ctx.strokeStyle = "#4f46e5"; // Line color
+  ctx.lineWidth = 2;
+  
+  // Need to start a new path for the line itself so the stroke doesn't include the bottom closure
+  ctx.beginPath();
   ctx.moveTo(startPoint.x, startPoint.y);
 
   if (smooth) {
@@ -81,13 +118,38 @@ function drawChart(points, smooth = false) {
   }
 
   ctx.stroke();
+  // --- END LINE STROKE LOGIC ---
 
-  // Dots
-  ctx.fillStyle = "#6366f1";
+
+  // Dots - MODIFIED LOGIC
+  const lastHistoricalIndex = points.length - 2; // Index of the 7th point (Day 7)
+  const predictionIndex = points.length - 1;     // Index of the 8th point (Day 8/Forecast)
+  
+  // Get prices for comparison
+  const lastHistoricalPrice = points[lastHistoricalIndex]?.predicted_price;
+  const predictionPrice = points[predictionIndex]?.predicted_price;
+  
   points.forEach((_, i) => {
     const p = getPoint(i);
+    let dotColor = "#6366f1"; // Default color for historical data (original blue)
+
+    if (i === lastHistoricalIndex) {
+      // Point 7 (last historical point) is colored white
+      dotColor = "white";
+    } else if (i === predictionIndex) {
+      // Point 8 (prediction/forecast point) is colored based on change from point 7
+      if (predictionPrice > lastHistoricalPrice) {
+        dotColor = "#10b981"; // Green (e.g., emerald-500 from Tailwind)
+      } else if (predictionPrice < lastHistoricalPrice) {
+        dotColor = "#ef4444"; // Red (e.g., red-500 from Tailwind)
+      } else {
+        dotColor = "#6366f1"; // Blue/Default (if prices are exactly the same)
+      }
+    }
+    
+    ctx.fillStyle = dotColor;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); // Increased radius to 4 for better visibility of the highlighted dots
     ctx.fill();
   });
 }
@@ -99,33 +161,71 @@ function setLoading(isLoading) {
 }
 
 function processData(data) {
+  // The last point in the 'predictions' array is the ML forecast
   const points = data.predictions;
-  
-  // Build list HTML
+  const predictionPoint = points.length > 0 ? points[points.length - 1] : null;
+
+  // Build list HTML (Historical + Prediction)
   const listHTML = points.map((p) => {
+    const isPrediction = p === predictionPoint;
+    // Check if 'day' is present (added in app.py update)
+    const dayStr = p.day ? ` (Day ${p.day})` : ''; 
     const priceStr = `$${fmt(p.predicted_price)}`;
-    return `<li><b>Day ${p.day}:</b> ${priceStr}</li>`;
+    // Highlight the prediction point in the list
+    return `<li class="${isPrediction ? 'highlight' : ''}"><b>${p.date}${dayStr}:</b> ${priceStr} ${isPrediction ? '<span class="badge small">Forecast</span>' : ''}</li>`;
   }).join('');
 
   els.list.innerHTML = listHTML;
   els.meta.ticker.textContent = data.ticker;
   els.meta.updated.textContent = new Date(data.generated_at).toLocaleString();
 
+  // Clear or populate meta data
   if (points && points.length > 0) {
-    const start = points[0].predicted_price;
-    const end = points[points.length - 1].predicted_price;
-    const delta = end - start;
-    const pct = (delta / (start || 1)) * 100;
+    // The historical data ends one point before the forecast
+    const historicalPoints = points.slice(0, -1);
+    
+    // UPDATED: Set the Next Day Prediction Price
+    if (predictionPoint) {
+      els.meta.nextPrice.textContent = `$${fmt(predictionPoint.predicted_price)}`;
+      els.meta.nextPrice.title = `Forecast for ${predictionPoint.date}`;
+    } else {
+      els.meta.nextPrice.textContent = '—';
+      els.meta.nextPrice.title = '';
+    }
 
-    els.meta.start.textContent = `$${fmt(start)}`;
-    els.meta.end.textContent = `$${fmt(end)}`;
-    els.meta.change.textContent = `${delta >= 0 ? "+" : ""}$${fmt(delta)}`;
-    els.meta.changePct.textContent = `${delta >= 0 ? "+" : ""}${fmt(pct)}%`;
+    // Check if there is enough historical data for start/end comparison
+    if (historicalPoints.length > 0) {
+      const start = historicalPoints[0].predicted_price;
+      const end = historicalPoints[historicalPoints.length - 1].predicted_price;
+      const delta = predictionPoint.predicted_price - end; // Compare forecast to last historical price
+      const pct = (delta / (end || 1)) * 100;
+
+      els.meta.start.textContent = `$${fmt(start)}`;
+      els.meta.end.textContent = `$${fmt(end)}`;
+      
+      // Check if the prediction has a positive or negative change to apply color (optional, but good UX)
+      const changeClass = delta >= 0 ? 'ok' : 'err';
+      
+      els.meta.change.innerHTML = `<span class="${changeClass}">${delta >= 0 ? "+" : ""}$${fmt(delta)}</span>`;
+      els.meta.changePct.innerHTML = `<span class="${changeClass}">${delta >= 0 ? "+" : ""}${fmt(pct)}%</span>`;
+      
+      // Also update start and end dates in the meta
+      els.meta.start.title = historicalPoints[0].date; 
+      els.meta.end.title = historicalPoints[historicalPoints.length - 1].date; 
+    }
+
+  } else {
+    // Clear metadata if no points
+    els.meta.start.textContent = '—';
+    els.meta.end.textContent = '—';
+    els.meta.change.textContent = '—';
+    els.meta.changePct.textContent = '—';
+    els.meta.nextPrice.textContent = '—'; // Clear the new element
   }
 
   els.json.textContent = JSON.stringify(data, null, 2);
   drawChart(points, els.smooth.checked);
-  toast("ok", `Prediction for ${data.ticker} loaded successfully!`);
+  toast("ok", `Forecast for ${data.ticker} loaded successfully!`);
 }
 
 async function fetchPrediction() {

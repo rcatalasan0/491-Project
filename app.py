@@ -4,6 +4,10 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
 
+# 1. ADD NEW IMPORTS: Import the required functions from stockFunctions.py
+from mlSkeletons.stockFunctions import stockData_days, stockData_summary
+from mlSkeletons.randomForestRegression import random_forest_regression_operations
+
 # Load environment variables
 load_dotenv()
 
@@ -20,15 +24,16 @@ def health():
 
 @app.route("/predict")
 def predict():
-    """Stock prediction endpoint"""
+    """Stock forecast endpoint: 7 days historical data + 1-day ML prediction"""
     ticker = (request.args.get("ticker") or "").upper().strip()
     days = request.args.get("days", "7")
     
-    # Validation
+    # Validation (Keep original validation logic)
     if not ticker:
         return jsonify({"error": "ticker is required"}), 400
     
     try:
+        # days parameter now defines the number of *historical* days to display
         days = int(days)
         if days < 1 or days > 30:
             return jsonify({"error": "days must be between 1 and 30"}), 400
@@ -39,38 +44,73 @@ def predict():
     if not ticker.isalnum() or len(ticker) > 10:
         return jsonify({"error": "ticker must be alphanumeric and <= 10 characters"}), 400
     
-    # Demo data for supported tickers
-    demo_data = {
-        "LMT": {"base": 429.85, "trend": 0.8},
-        "RTX": {"base": 114.90, "trend": 0.5},
-        "BA": {"base": 180.35, "trend": 0.9},
-        "NOC": {"base": 450.00, "trend": 0.7},
-        "GD": {"base": 246.50, "trend": 0.6},
+    # --- 1. Fetch Historical Data ---
+    try:
+        # Fetch N days of historical data (e.g., 7 days)
+        raw_data = stockData_days(days, ticker) 
+        
+        if raw_data.empty:
+            return jsonify({"error": f"No data found for ticker: {ticker}. Check the ticker symbol."}), 404
+        
+        # Calculate summary features and select AveragePrice
+        summary_df = stockData_summary(raw_data) 
+        historical_data = summary_df[['AveragePrice']].reset_index()
+        
+        # Format the DataFrame into the expected JSON structure for the frontend
+        historical_data['date'] = historical_data['Date'].dt.strftime('%Y-%m-%d')
+        historical_data['predicted_price'] = historical_data['AveragePrice'].round(2)
+        
+        # Convert the records to a list of dicts for jsonify
+        predictions = historical_data[['date', 'predicted_price']].to_dict(orient='records')
+            
+    except Exception as e:
+        print(f"Error fetching historical data for {ticker}: {e}")
+        return jsonify({"error": f"An error occurred while fetching historical data for {ticker}. Detail: {e}"}), 500
+
+    # --- 2. Generate 1-Day Machine Learning Prediction ---
+    predicted_next_avg_price = None
+    try:
+        # Use 5 years of data for model training
+        predicted_next_avg_price = random_forest_regression_operations(ticker, years=5)
+    except Exception as e:
+        # ML prediction failed, but we must return an error because the request is a *forecast*.
+        print(f"Error generating ML prediction for {ticker}: {e}")
+        return jsonify({"error": f"ML prediction failed for {ticker}. Detail: {e}"}), 500
+
+    # --- 3. Combine Historical Data and Prediction ---
+    
+    # Determine the date for the prediction point (The day *after* the last historical point)
+    last_historical_date = historical_data['Date'].iloc[-1]
+    
+    # Start checking from the next calendar day until a non-weekend/holiday date is found
+    next_day = last_historical_date + timedelta(days=1)
+    
+    # Simple check to skip weekend days: Monday=0 to Sunday=6
+    while next_day.weekday() >= 5: # 5 is Saturday, 6 is Sunday
+        next_day += timedelta(days=1)
+        
+    next_day_str = next_day.strftime('%Y-%m-%d')
+    
+    # Append the single prediction point to the list
+    prediction_point = {
+        'date': next_day_str,
+        'predicted_price': round(predicted_next_avg_price, 2)
     }
     
-    if ticker not in demo_data:
-        return jsonify({"error": f"Ticker '{ticker}' not available in demo data"}), 404
-    
-    # Generate predictions
-    base_price = demo_data[ticker]["base"]
-    trend = demo_data[ticker]["trend"]
-    
-    predictions = []
-    today = datetime.utcnow().date()
-    
-    for i in range(days):
-        day_num = i + 1
-        predicted_price = round(base_price + (day_num * trend), 2)
-        predictions.append({
-            "day": day_num,
-            "date": (today + timedelta(days=day_num)).isoformat(),
-            "predicted_price": predicted_price
-        })
-    
+    # Add a 'day' index to all points for the frontend list display
+    for i, prediction in enumerate(predictions):
+        prediction['day'] = i + 1
+        
+    # Append the prediction point with its 'day' index
+    prediction_point['day'] = len(predictions) + 1
+    predictions.append(prediction_point)
+
+
+    # Return the combined data
     return jsonify({
         "ticker": ticker,
-        "days": days,
-        "model": "baseline-linear-demo",
+        "days": len(predictions), # Return the actual number of points (historical + 1 prediction)
+        "model": "RF-1day-forecast", # Indicate that this is a forecast
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "predictions": predictions
     })
