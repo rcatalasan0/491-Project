@@ -16,7 +16,7 @@ def stockData_days(days: int, ticker: str) -> pd.DataFrame:
 # input is the number of months & stock symbol
 def stockData_months(months: int, ticker: str) -> pd.DataFrame:
     stock = yf.Ticker(ticker)
-    data = stock.history(period= str(years) + "mo") # specify month period with parameter
+    data = stock.history(period= str(months) + "mo") # specify month period with parameter
 
     # Ensure it's sorted by date (ascending)
     data = data.sort_index()
