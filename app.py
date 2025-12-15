@@ -1,414 +1,131 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
-import psycopg2
-from psycopg2.extras import RealDictCursor
-import bcrypt
 import os
-import re
 
-# Load environment variables from .env file
+# ML imports
+from mlSkeletons.stockFunctions import stockData_days, stockData_summary
+from mlSkeletons.randomForestRegression import random_forest_regression_operations
+
+# Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)  # allows frontend to call this API
 
-# Database configuration
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '5432'),
-    'database': os.getenv('DB_NAME', 'stock_predictor'),
-    'user': os.getenv('DB_USER', 'postgres'),
-    'password': os.getenv('DB_PASSWORD', 'your_password_here')
-}
+# Allow Destinate (React) dev server
+CORS(app, resources={r"/*": {"origins": ["http://localhost:5002"]}})
 
-def get_db_connection():
-    """Create and return a database connection"""
-    try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        return conn
-    except psycopg2.Error as e:
-        print(f"Database connection error: {e}")
-        return None
-    
-def record_auth_event(action, email, user_id=None):
-    """
-    Insert a simple authentication audit record.
-    This is best-effort: failures here should not break login or register.
-    """
-    try:
-        conn = get_db_connection()
-        if not conn:
-            return
+# =========================================================
+# HTML PAGES (served by Flask)
+# =========================================================
 
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO auth_audit (user_id, email, action, ip_address)
-            VALUES (%s, %s, %s, %s)
-            """,
-            (user_id, email, action, request.remote_addr)
-        )
-        conn.commit()
+@app.route("/login")
+def login_page():
+    return send_from_directory(".", "login.html")
 
-    except Exception as e:
-        print(f"Auth audit error: {e}")
+@app.route("/prediction-tool")
+def prediction_tool():
+    return send_from_directory(".", "prediction-tool.html")
 
-    finally:
-        try:
-            cursor.close()
-            conn.close()
-        except:
-            pass
+# Serve CSS / JS / images
+@app.route("/<path:filename>")
+def static_files(filename):
+    return send_from_directory(".", filename)
 
-import re   # make sure this is at your imports at the very top
-
-PASSWORD_REGEX = re.compile(
-    r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$"
-)
-# Explanation:
-# - at least 8 characters
-# - at least 1 lowercase
-# - at least 1 uppercase
-# - at least 1 digit
-
-def validate_password(password: str):
-    """
-    Validate password complexity.
-    Returns (valid: bool, message: str)
-    """
-    if not password:
-        return False, "Password is required."
-
-    if not PASSWORD_REGEX.match(password):
-        return False, (
-            "Password must be at least 8 characters long, contain "
-            "one uppercase letter, one lowercase letter, and one digit."
-        )
-
-    return True, ""
-
-from collections import defaultdict
-import time   # also ensure this is imported above
-
-LOGIN_RATE_LIMIT_WINDOW = 60     # seconds
-LOGIN_RATE_LIMIT_MAX = 10        # max attempts per IP per window
-login_attempts = defaultdict(list)
-
-def is_rate_limited(ip: str) -> bool:
-    """
-    Simple in-memory IP-based rate limiter for login attempts.
-    Returns True if the IP exceeded allowed login rate.
-    """
-    now = time.time()
-    attempts = login_attempts[ip]
-
-    # keep only attempts within time window
-    attempts = [t for t in attempts if now - t < LOGIN_RATE_LIMIT_WINDOW]
-    attempts.append(now)
-
-    login_attempts[ip] = attempts
-
-    return len(attempts) > LOGIN_RATE_LIMIT_MAX
-
-def validate_email(email):
-    """Validate email format"""
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(pattern, email) is not None
-
-def validate_password(password):
-    """Validate password strength"""
-    if len(password) < 8:
-        return False, "Password must be at least 8 characters long"
-    if not re.search(r'[A-Z]', password):
-        return False, "Password must contain at least one uppercase letter"
-    if not re.search(r'[a-z]', password):
-        return False, "Password must contain at least one lowercase letter"
-    if not re.search(r'[0-9]', password):
-        return False, "Password must contain at least one number"
-    return True, "Valid"
-
-@app.route("/api/register", methods=["POST"])
-def register():
-    """Handle user registration"""
-    try:
-        data = request.get_json()
-        
-        # Validate input
-        email = data.get('email', '').strip().lower()
-        password = data.get('password', '')
-        
-        if not email or not password:
-            return jsonify({"error": "Email and password are required"}), 400
-        
-        # Email validation
-        if not validate_email(email):
-            return jsonify({"error": "Invalid email format"}), 400
-        
-        # Password validation
-        is_valid, message = validate_password(password)
-        if not is_valid:
-            return jsonify({"error": message}), 400
-        
-        # Connect to database
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"error": "Database connection failed. Please try again later."}), 500
-        
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        try:
-            # Check if user already exists
-            cursor.execute(
-                "SELECT id FROM users WHERE email = %s",
-                (email,)
-            )
-            existing_user = cursor.fetchone()
-            
-            if existing_user:
-                cursor.close()
-                conn.close()
-                return jsonify({
-                    "error": "An account with this email already exists. Please login instead."
-                }), 409
-            
-            # Hash password with bcrypt
-            password_hash = bcrypt.hashpw(
-                password.encode('utf-8'),
-                bcrypt.gensalt()
-            ).decode('utf-8')
-            
-            # Insert new user
-            cursor.execute(
-                """
-                INSERT INTO users (email, password_hash, role, created_at)
-                VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
-                RETURNING id, email, created_at
-                """,
-                (email, password_hash, 'user')
-            )
-            
-            new_user = cursor.fetchone()
-            conn.commit()
-            
-            print(f"✅ New user registered: {email} (ID: {new_user['id']})")
-            
-            cursor.close()
-            conn.close()
-            
-            return jsonify({
-                "success": True,
-                "message": "Registration successful! Redirecting to login...",
-                "user": {
-                    "id": new_user['id'],
-                    "email": new_user['email'],
-                    "created_at": new_user['created_at'].isoformat()
-                }
-            }), 201
-            
-        except psycopg2.IntegrityError as e:
-            conn.rollback()
-            cursor.close()
-            conn.close()
-            return jsonify({
-                "error": "Email already registered. Please use a different email."
-            }), 409
-            
-        except Exception as e:
-            conn.rollback()
-            cursor.close()
-            conn.close()
-            print(f"Registration error: {e}")
-            return jsonify({
-                "error": "Registration failed. Please try again."
-            }), 500
-            
-    except Exception as e:
-        print(f"Request error: {e}")
-        return jsonify({"error": "Invalid request data"}), 400
-
-@app.route("/api/login", methods=["POST"])
-def login():
-    """Handle user login"""
-    try:
-        data = request.get_json()
-        
-        email = data.get('email', '').strip().lower()
-        password = data.get('password', '')
-        
-        if not email or not password:
-            return jsonify({"error": "Email and password are required"}), 400
-        
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"error": "Database connection failed"}), 500
-        
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        try:
-            # Get user from database
-            cursor.execute(
-                "SELECT id, email, password_hash, role FROM users WHERE email = %s",
-                (email,)
-            )
-            user = cursor.fetchone()
-            
-            if not user:
-                cursor.close()
-                conn.close()
-                return jsonify({"error": "Invalid email or password"}), 401
-            
-            # Verify password
-            if bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
-                # Update last login
-                cursor.execute(
-                    "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = %s",
-                    (user['id'],)
-                )
-                conn.commit()
-                
-                print(f"✅ User logged in: {email} (ID: {user['id']})")
-                
-                cursor.close()
-                conn.close()
-                
-                return jsonify({
-                    "success": True,
-                    "message": "Login successful!",
-                    "user": {
-                        "id": user['id'],
-                        "email": user['email'],
-                        "role": user['role']
-                    }
-                }), 200
-            else:
-                cursor.close()
-                conn.close()
-                return jsonify({"error": "Invalid email or password"}), 401
-                
-        except Exception as e:
-            cursor.close()
-            conn.close()
-            print(f"Login error: {e}")
-            return jsonify({"error": "Login failed. Please try again."}), 500
-            
-    except Exception as e:
-        print(f"Request error: {e}")
-        return jsonify({"error": "Invalid request data"}), 400
+# =========================================================
+# API ENDPOINTS
+# =========================================================
 
 @app.route("/health")
 def health():
-    """Health check endpoint"""
-    try:
-        conn = get_db_connection()
-        if conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1")
-            cursor.close()
-            conn.close()
-            db_status = "connected"
-        else:
-            db_status = "disconnected"
-    except Exception as e:
-        db_status = f"error: {str(e)}"
-    
     return jsonify({
         "status": "ok",
-        "database": db_status,
-        "timestamp": datetime.utcnow().isoformat()
-    })
-
-@app.route("/api/users/count")
-def users_count():
-    """Get total number of registered users"""
-    try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"error": "Database connection failed"}), 500
-        
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("SELECT COUNT(*) as count FROM users")
-        result = cursor.fetchone()
-        
-        cursor.close()
-        conn.close()
-        
-        return jsonify({
-            "total_users": result['count']
-        }), 200
-        
-    except Exception as e:
-        print(f"Error getting user count: {e}")
-        return jsonify({"error": "Failed to get user count"}), 500
-
-@app.get("/predict")
-def predict():
-    """Existing prediction endpoint"""
-    ticker = (request.args.get("ticker") or "").upper()
-    days = int(request.args.get("days") or 7)
-    if not ticker:
-        return jsonify(error="Missing ticker"), 400
-
-    start_price = 420.0
-    preds = []
-    today = datetime.utcnow().date()
-    for i in range(days):
-        preds.append({
-            "date": (today + timedelta(days=i+1)).isoformat(),
-            "price": round(start_price + i * 1.8, 2)
-        })
-
-    return jsonify({
-        "ticker": ticker,
-        "last_updated": datetime.utcnow().isoformat() + "Z",
-        "predictions": preds
+        "timestamp": datetime.now(timezone.utc).isoformat()
     })
 
 @app.route("/stocks")
 def get_stocks():
-    """Get all defense sector stocks"""
+    stocks = [
+        {"symbol": "LMT", "name": "Lockheed Martin Corporation", "sector": "defense"},
+        {"symbol": "RTX", "name": "Raytheon Technologies Corporation", "sector": "defense"},
+        {"symbol": "BA", "name": "The Boeing Company", "sector": "defense"},
+        {"symbol": "NOC", "name": "Northrop Grumman Corporation", "sector": "defense"},
+        {"symbol": "GD", "name": "General Dynamics Corporation", "sector": "defense"},
+    ]
+    return jsonify({"stocks": stocks, "count": len(stocks)})
+
+@app.route("/predict")
+def predict():
+    ticker = (request.args.get("ticker") or "").upper().strip()
+    days = request.args.get("days", "7")
+
+    if not ticker:
+        return jsonify({"error": "ticker is required"}), 400
+
     try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"error": "Database connection failed"}), 500
-        
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("SELECT symbol, name, sector, exchange FROM stocks ORDER BY symbol")
-        stocks = cursor.fetchall()
-        
-        cursor.close()
-        conn.close()
-        
-        return jsonify({
-            "stocks": stocks,
-            "count": len(stocks)
-        }), 200
-        
+        days = int(days)
+        if not (1 <= days <= 30):
+            return jsonify({"error": "days must be between 1 and 30"}), 400
+    except ValueError:
+        return jsonify({"error": "days must be an integer"}), 400
+
+    if not ticker.isalnum() or len(ticker) > 10:
+        return jsonify({"error": "invalid ticker"}), 400
+
+    try:
+        raw = stockData_days(days, ticker)
+        if raw.empty:
+            return jsonify({"error": "no data found"}), 404
+
+        summary = stockData_summary(raw)
+        hist = summary[["AveragePrice"]].reset_index()
+        hist["date"] = hist["Date"].dt.strftime("%Y-%m-%d")
+        hist["predicted_price"] = hist["AveragePrice"].round(2)
+        predictions = hist[["date", "predicted_price"]].to_dict(orient="records")
     except Exception as e:
-        print(f"Error getting stocks: {e}")
-        return jsonify({"error": "Failed to get stocks"}), 500
+        return jsonify({"error": f"data fetch failed: {e}"}), 500
+
+    try:
+        next_price = random_forest_regression_operations(ticker, years=5)
+    except Exception as e:
+        return jsonify({"error": f"ML prediction failed: {e}"}), 500
+
+    last_date = hist["Date"].iloc[-1]
+    next_day = last_date + timedelta(days=1)
+    while next_day.weekday() >= 5:
+        next_day += timedelta(days=1)
+
+    predictions.append({
+        "date": next_day.strftime("%Y-%m-%d"),
+        "predicted_price": round(next_price, 2),
+        "day": len(predictions) + 1
+    })
+
+    for i, p in enumerate(predictions):
+        p["day"] = i + 1
+
+    return jsonify({
+        "ticker": ticker,
+        "model": "RandomForest-1day",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "predictions": predictions
+    })
+
+# =========================================================
+# SERVER START
+# =========================================================
 
 if __name__ == "__main__":
-    host = os.getenv('HOST', '127.0.0.1')
-    port = int(os.getenv('PORT', 5000))
-    debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'
-    
+    host = "127.0.0.1"
+    port = 5000
+
     print("=" * 60)
-    print("🚀 Stock Predictor - Starting Flask Server")
+    print("Stock Predictor Flask Server")
     print("=" * 60)
-    print(f"📊 Database: {DB_CONFIG['database']} on {DB_CONFIG['host']}")
-    print(f"🌐 Server: http://{host}:{port}")
-    print(f"🔧 Debug Mode: {debug}")
+    print(f"Login Page:       http://{host}:{port}/login")
+    print(f"Prediction Tool:  http://{host}:{port}/prediction-tool")
+    print(f"Health Check:     http://{host}:{port}/health")
     print("=" * 60)
-    print("\n📝 Available Endpoints:")
-    print(f"   - http://{host}:{port}/health")
-    print(f"   - http://{host}:{port}/api/register (POST)")
-    print(f"   - http://{host}:{port}/api/login (POST)")
-    print(f"   - http://{host}:{port}/api/users/count")
-    print(f"   - http://{host}:{port}/predict?ticker=LMT&days=7")
-    print(f"   - http://{host}:{port}/stocks")
-    print("=" * 60)
-    print("\nPress CTRL+C to stop the server\n")
-    
-    app.run(host=host, port=port, debug=debug)
+
+    app.run(host=host, port=port, debug=True)
