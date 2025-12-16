@@ -3,55 +3,73 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Stock Predictor • MVP</title>
+  <title>Destinate • Stocks</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="site-header">
-    <div class="container head-wrap">
-      <h1 class="brand">Stock Predictor <span class="badge">MVP</span></h1>
-      <nav class="header-actions">
-        <!-- <a class="link" href="login.html">Sign Out</a>
-        <a class="link" href="README.md">Docs</a>
-        <a class="link" href="https://github.com/rcatalasan0/491-Project" target="_blank" rel="noreferrer">GitHub</a> -->
+
+  <!-- Destinate-style navbar -->
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">Destinate</a>
+
+      <nav class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="index.html#destinations">Destinations</a>
+        <a href="index.html#forum">Forum</a>
+        <a class="active" href="prediction-tool.html">Stocks</a>
+        <a href="index.html#about">About</a>
       </nav>
-    </div>
+
+      <div class="nav-right">
+        <button id="themeToggle" class="theme-toggle" aria-label="Toggle dark mode">
+         🌙
+        </button>
+        <a class="signin" href="login.html">Sign In</a>
+        <a class="cta" href="prediction-tool.html">Plan your trip</a>
+      </div>
+
   </header>
 
-  <main class="container">
-    <section class="panel hero">
-      <div class="hero-copy">
-        <h2>Defense Sector Forecasts, Fast.</h2>
-        <p class="muted">
-          Enter a ticker to fetch a 7-day prediction.
-        </p>
+  <!-- Hero section -->
+  <section class="hero">
+    <div class="hero-inner">
+      <h1>Defense Sector Forecasts</h1>
+      <p class="hero-sub">
+        Enter a ticker to fetch a 7-day prediction using our stock predictor MVP.
+      </p>
 
+      <div class="hero-card">
         <div class="input-wrap">
           <input type="text" id="tickerInput" placeholder="LMT" />
           <button id="predictButton">Predict</button>
         </div>
 
-        <div class="form-group" style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between;">
+        <div class="form-row">
           <label class="checkbox-wrap">
             <input type="checkbox" id="smoothToggle" checked>
-            <span>Smooth Chart Lines</span>
+            <span>Smooth chart lines</span>
           </label>
-          <span class="hint">Tip: For this demo, try **LMT**, **RTX**, or **BA** (data from seed.sql).</span>
+          <span class="hint">Tip: For this demo, try <b>LMT</b>, <b>RTX</b>, or <b>BA</b> (seed.sql).</span>
         </div>
 
-        <div id="status" class="toast info" role="status" aria-live="polite"></div>
+        <div id="status" class="status" role="status" aria-live="polite"></div>
       </div>
-    </section>
+    </div>
+  </section>
 
+  <!-- Main content -->
+  <main class="wrap">
     <section class="grid">
       <article class="card">
         <h3>7-Day Price Projection</h3>
         <canvas id="chart" width="800" height="360"></canvas>
+
         <details class="json-wrap">
           <summary>Raw API response (Demo Data)</summary>
           <pre id="jsonDump">{}</pre>
@@ -63,7 +81,7 @@
         <div class="meta">
           <div class="kv"><b>Ticker</b><span id="m-ticker">—</span></div>
           <div class="kv"><b>Last Updated</b><span id="m-updated">—</span></div>
-          
+
           <div class="kv"><b>Next Day Forecast</b><span id="m-nextPrice">—</span></div>
 
           <div class="kv"><b>Start Price</b><span id="m-start">—</span></div>
@@ -72,19 +90,17 @@
           <div class="kv"><b>Forecasted Change (%)</b><span id="m-changePct">—</span></div>
         </div>
 
-        <h4 style="margin-top:14px;">Daily Points</h4>
+        <h4 class="subhead">Daily Points</h4>
         <ul id="predictionList" class="list">
           <li class="muted">Results will appear here.</li>
         </ul>
       </aside>
     </section>
-  </main>
 
-  <footer class="site-footer">
-    <div class="container">
-      <p>© 2025 Stock Predictor • Prototype UI</p>
-    </div>
-  </footer>
+    <footer class="footer">
+      <p>© 2025 Destinate • Stock Predictor</p>
+    </footer>
+  </main>
 
   <script src="script.js"></script>
 </body>
